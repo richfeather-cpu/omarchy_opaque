@@ -31,8 +31,7 @@ equal(context.shouldCarryAcrossTheme(true, false, false), false, "theme default 
 equal(
   context.parseThemeOpacity(
     '{"option":"decoration:active_opacity","float":1}\n' +
-    '{"opacity":0.985}\n' +
-    '{"opacity_override":false}\n'
+    '{"opacity":0.985,"opacity_override":false}\n'
   ),
   98.5,
   "multiplied theme opacity"
@@ -40,8 +39,7 @@ equal(
 equal(
   context.parseThemeOpacity(
     '{"option":"decoration:active_opacity","float":0.8}\n' +
-    '{"opacity":0.92}\n' +
-    '{"opacity_override":true}\n'
+    '{"opacity":0.92,"opacity_override":true}\n'
   ),
   92,
   "overridden theme opacity"
@@ -56,16 +54,39 @@ equal(
 equal(
   context.parseThemeOpacity(
     '{"option":"decoration:active_opacity","float":0.8}\n' +
-    '{"opacity":null}\n'
+    '{"opacity":null,"opacity_override":false}\n'
   ),
   null,
   "null live window opacity"
 )
 equal(context.parseThemeOpacity("not json"), null, "invalid option output")
+equal(
+  context.parseThemeOpacity(
+    '{"option":"decoration:active_opacity","float":1}\n' +
+    '{"opacity":1,"opacity_override":true}\n' +
+    '{"opacity":0.985,"opacity_override":false}\n' +
+    '{"opacity":1,"opacity_override":true}\n'
+  ),
+  98.5,
+  "app-specific opaque windows do not replace the theme value"
+)
+equal(
+  context.parseThemeOpacity(
+    '{"option":"decoration:active_opacity","float":1}\n' +
+    '{"opacity":0.94,"opacity_override":true}\n' +
+    '{"opacity":1,"opacity_override":true}\n'
+  ),
+  94,
+  "override-only themes use the lowest matching value"
+)
 
 const themeProbe = context.themeOpacityProbe()
-if (!themeProbe.includes("tag:default-opacity.*"))
+if (!themeProbe.includes("hyprctl clients -j"))
+  throw new Error("theme probe must inspect all live clients")
+if (!themeProbe.includes("^default-opacity\\\\*?$"))
   throw new Error("theme probe must match Hyprland's dynamic tag suffix")
+if (!themeProbe.includes("^0x[0-9A-Fa-f]+$"))
+  throw new Error("theme probe must validate client addresses")
 
 const opaque = context.renderLuaCall("/tmp/Omapaque.lua", "apply", 100)
 if (!opaque.includes('loadfile("/tmp/Omapaque.lua")')) throw new Error("Lua module path must be quoted")

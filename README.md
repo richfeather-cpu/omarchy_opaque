@@ -1,8 +1,9 @@
 # Omapaque
 
 Omapaque adds an exact window-opacity slider to the Omarchy bar. It reads the
-current theme's focused-window opacity and shows that value when the theme is
-applied.
+current theme's default window opacity and shows that value when the theme is
+applied. App-specific rules that force a terminal or media window opaque do not
+replace the theme value shown by the slider.
 
 Moving the slider sets that exact opacity for active, inactive, and fullscreen
 windows. Setting it to 100% makes windows fully opaque, even when the theme has

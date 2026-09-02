@@ -29,7 +29,6 @@ Panel {
   property real wheelAccumulator: 0
   property int baselineRetryDelay: 1500
   property string errorText: ""
-  property string cleanupAction: ""
 
   readonly property string themeNamePath: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme.name"
   readonly property string luaModulePath: Quickshell.env("HOME")
@@ -152,9 +151,8 @@ Panel {
     root.baselineRetryDelay = Logic.nextRetryDelay(root.baselineRetryDelay)
   }
 
-  function startCleanup(action) {
+  function clearOverrideBeforeBaseline() {
     if (cleanupProc.running || reloadProc.running) return
-    root.cleanupAction = action
     cleanupProc.command = [
       "hyprctl", "eval", Logic.renderLuaCall(root.luaModulePath, "cleanup")
     ]
@@ -165,7 +163,7 @@ Panel {
     if (baselineProc.running) return
     root.errorText = ""
     baselineProc.command = [
-      "hyprctl", "-j", "--batch",
+      "bash", "-c",
       Logic.themeOpacityProbe()
     ]
     baselineProc.running = true
@@ -224,7 +222,7 @@ Panel {
     root.awaitingThemeBaseline = true
     root.customized = false
     root.errorText = ""
-    root.startCleanup("reload")
+    root.clearOverrideBeforeBaseline()
   }
 
   function nudgeOpacity(delta) {
@@ -266,7 +264,7 @@ Panel {
   Timer {
     id: baselineDelay
     interval: 250
-    onTriggered: root.startCleanup("baseline")
+    onTriggered: root.clearOverrideBeforeBaseline()
   }
 
   Timer {
@@ -314,11 +312,7 @@ Panel {
 
   Process {
     id: cleanupProc
-    onExited: {
-      if (root.cleanupAction === "reload") reloadProc.running = true
-      else root.readBaseline()
-      root.cleanupAction = ""
-    }
+    onExited: reloadProc.running = true
   }
 
   Process {
