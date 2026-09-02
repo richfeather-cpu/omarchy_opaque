@@ -11,6 +11,12 @@ function formatPercent(value) {
   return (Math.round(number) === number ? String(number) : number.toFixed(1)) + "%"
 }
 
+function finiteNumber(value) {
+  if (value === undefined || value === null || value === "") return null
+  var number = Number(value)
+  return isFinite(number) ? number : null
+}
+
 function parseThemeOpacity(raw) {
   var values = {}
   var objects = String(raw || "").match(/\{[^{}]*\}/g) || []
@@ -28,18 +34,31 @@ function parseThemeOpacity(raw) {
     }
   }
 
-  var globalActive = Number(values["decoration:active_opacity"])
-  if (!isFinite(globalActive)) return null
+  var globalActive = finiteNumber(values["decoration:active_opacity"])
+  if (globalActive === null) return null
 
-  // Omarchy's normal window rule is 0.985 when no matching window exists for
-  // getprop to inspect. A live matching window supplies the theme's real value.
-  var ruleActive = Number(values.opacity)
-  if (!isFinite(ruleActive)) ruleActive = 0.985
+  // getprop needs a live matching window. Returning null lets the panel retry
+  // instead of presenting a guessed Omarchy default as the theme's value.
+  var ruleActive = finiteNumber(values.opacity)
+  if (ruleActive === null) return null
 
   var actual = values.opacity_override === true
     ? ruleActive
     : globalActive * ruleActive
   return clampPercent(actual * 100)
+}
+
+function renderUnloadCleanup() {
+  return [
+    "exec 9>\"${XDG_RUNTIME_DIR:-/tmp}/omapaque-cleanup.lock\"",
+    "flock -n 9 || exit 0",
+    "sleep 0.25",
+    "plugins=$(omarchy-shell shell listPlugins 2>/dev/null) || exit 0",
+    "[[ -n \"$plugins\" ]] || exit 0",
+    "if printf '%s' \"$plugins\" | jq -e --arg id \"$1\" 'any(.[]; .id == $id and .enabled == true)' >/dev/null; then exit 0; fi",
+    "hyprctl eval \"$2\" >/dev/null 2>&1",
+    "hyprctl reload >/dev/null 2>&1"
+  ].join("\n")
 }
 
 function luaNumber(value) {

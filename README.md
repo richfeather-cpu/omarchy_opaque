@@ -31,6 +31,16 @@ with:
 omarchy bar move tomrplummer.omapaque --section right
 ```
 
+## Update
+
+```bash
+omarchy plugin update tomrplummer.omapaque --yes
+omarchy restart shell
+```
+
+Restarting the shell makes sure it loads the updated QML instead of a cached
+copy.
+
 ## Use
 
 - Left-click opens the slider.
@@ -49,7 +59,8 @@ omarchy plugin remove tomrplummer.omapaque --yes
 hyprctl reload
 ```
 
-Reloading Hyprland restores the current theme's opacity after removal.
+Omapaque restores the theme opacity when it is disabled or removed. The explicit
+Hyprland reload is a fallback in case removal interrupts the shell cleanup.
 
 ## Requirements
 

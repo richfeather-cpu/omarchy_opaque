@@ -20,6 +20,7 @@ Panel {
   property bool applyQueued: false
   property bool initialized: false
   property bool awaitingThemeBaseline: false
+  property bool syncingSettings: false
   property bool cursorActive: false
   property string errorText: ""
   property string cleanupAction: ""
@@ -49,6 +50,40 @@ Panel {
     root.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
       root.bar.shell.updateEntryInline(root.moduleName, entry)
+  }
+
+  // Inline settings are shared by every monitor, while these display values
+  // are local properties. Copy each committed change into the other widgets.
+  function syncStateFromSettings() {
+    if (!root.initialized || root.syncingSettings) return
+    if (root.savedMode !== "absolute" || root.savedTheme !== root.themeName) return
+
+    root.syncingSettings = true
+    root.themeOpacityPercent = root.savedThemeOpacity
+    root.opacityPercent = root.savedPercent
+    root.customized = root.savedCustomized
+    root.awaitingThemeBaseline = false
+    root.errorText = ""
+    baselineDelay.stop()
+    baselineRetry.stop()
+    root.syncingSettings = false
+  }
+
+  // The bar creates one copy per monitor. The final copy starts detached
+  // cleanup, which checks that Omarchy really disabled the plugin before it
+  // touches Hyprland. Monitor removal and shell restarts therefore keep the
+  // active override.
+  function cleanupAfterUnload() {
+    var items = root.bar && typeof root.bar.moduleWidgets === "function"
+      ? root.bar.moduleWidgets(root.moduleName) : []
+    for (var i = 0; i < items.length; i++) {
+      if (items[i] && items[i] !== root) return
+    }
+
+    Quickshell.execDetached([
+      "bash", "-c", Logic.renderUnloadCleanup(),
+      "omapaque-cleanup", root.moduleName, Logic.renderCleanup()
+    ])
   }
 
   function readThemeName() {
@@ -105,8 +140,8 @@ Panel {
   function acceptBaseline(raw) {
     var baseline = Logic.parseThemeOpacity(raw)
     if (baseline === null) {
-      root.awaitingThemeBaseline = false
-      root.errorText = "Could not read Hyprland's opacity"
+      root.errorText = "Waiting for a window to read theme opacity"
+      baselineRetry.restart()
       return
     }
 
@@ -165,6 +200,9 @@ Panel {
   implicitHeight: button.implicitHeight
 
   onOpenedChanged: if (opened && !root.initialized) themeFile.reload()
+  onSettingsChanged: if (root.initialized && !root.syncingSettings)
+    Qt.callLater(root.syncStateFromSettings)
+  Component.onDestruction: root.cleanupAfterUnload()
 
   FileView {
     id: themeFile
@@ -184,6 +222,12 @@ Panel {
   Timer {
     id: postReloadDelay
     interval: 250
+    onTriggered: root.readBaseline()
+  }
+
+  Timer {
+    id: baselineRetry
+    interval: 1500
     onTriggered: root.readBaseline()
   }
 
@@ -250,6 +294,7 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: "◐"
+    fontSize: Style.bar.iconCanvas
     active: root.customized
     tooltipText: !root.customized
       ? "Window opacity: theme default"
@@ -386,6 +431,7 @@ Panel {
               maximum: 100
               step: 0.5
               value: root.opacityPercent
+              enabled: !root.awaitingThemeBaseline
               integer: false
               tickCount: 6
               onMoved: function(value) { root.setOpacity(value, false) }

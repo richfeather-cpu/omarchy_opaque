@@ -38,6 +38,21 @@ equal(
   92,
   "overridden theme opacity"
 )
+equal(
+  context.parseThemeOpacity(
+    '{"option":"decoration:active_opacity","float":0.8}\n'
+  ),
+  null,
+  "missing live window opacity"
+)
+equal(
+  context.parseThemeOpacity(
+    '{"option":"decoration:active_opacity","float":0.8}\n' +
+    '{"opacity":null}\n'
+  ),
+  null,
+  "null live window opacity"
+)
 equal(context.parseThemeOpacity("not json"), null, "invalid option output")
 
 const opaque = context.renderAbsoluteOpacity(100)
@@ -51,5 +66,11 @@ if (!opaque.includes('hl.on("window.open"')) throw new Error("new windows must i
 
 const cleanup = context.renderCleanup()
 if (!cleanup.includes("omapaque_subscription:remove()")) throw new Error("cleanup must remove the window listener")
+
+const unloadCleanup = context.renderUnloadCleanup()
+if (!unloadCleanup.includes("listPlugins")) throw new Error("unload cleanup must check plugin state")
+if (!unloadCleanup.includes(".enabled == true")) throw new Error("enabled plugins must keep their override")
+if (!unloadCleanup.includes("flock -n")) throw new Error("parallel unloads must share one cleanup")
+if (!unloadCleanup.includes("hyprctl reload")) throw new Error("disabled plugins must restore theme opacity")
 
 console.log("Logic tests passed")
