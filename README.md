@@ -1,9 +1,9 @@
 # Omapaque
 
 Omapaque adds an exact window-opacity slider to the Omarchy bar. It reads the
-current theme's default window opacity and shows that value when the theme is
-applied. App-specific rules that force a terminal or media window opaque do not
-replace the theme value shown by the slider.
+current theme's Hyprland settings and shows the theme's default active-window
+opacity. Personal and app-specific rules, such as a rule that keeps one terminal
+opaque, do not replace the theme value shown by the slider.
 
 Moving the slider sets that exact opacity for active, inactive, and fullscreen
 windows. Setting it to 100% makes windows fully opaque, even when the theme has
@@ -19,13 +19,13 @@ The Omarchy plugin command clones a Git repository. From inside this checkout,
 run:
 
 ```bash
-omarchy plugin install . --enable --yes
+omarchy plugin add . --enable --yes
 ```
 
 For a published copy, replace the path with its Git URL:
 
 ```bash
-omarchy plugin install https://github.com/tomrplummer/omapaque.git --enable
+omarchy plugin add https://github.com/tomrplummer/omapaque.git --enable
 ```
 
 Omarchy places the widget in the right section by default. If needed, move it
@@ -85,6 +85,23 @@ Hyprland reload is a fallback in case removal interrupts the shell cleanup.
 - Omarchy 4.x
 - Hyprland using Omarchy's Lua configuration
 - Omarchy shell with bar-widget plugin support
+- Bash, `jq`, and `flock`, which are included with Omarchy
+
+Omapaque runs `hyprctl eval` to manage its temporary Lua window rule and
+`hyprctl reload` when restoring theme control. It does not use `sudo`, edit
+Hyprland configuration, start services, or access the network.
+
+## Development
+
+Validate the plugin and run its tests with:
+
+```bash
+omarchy plugin validate .
+node test/run.js
+lua test/lua_test.lua
+```
+
+Node.js and Lua are only needed to run the development tests.
 
 ## License
 

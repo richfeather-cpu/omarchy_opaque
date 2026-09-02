@@ -29,8 +29,20 @@ Panel {
   property real wheelAccumulator: 0
   property int baselineRetryDelay: 1500
   property string errorText: ""
+  property bool themeNameChangedOnDisk: false
+  property bool defaultLookLoaded: false
+  property bool defaultRulesLoaded: false
+  property bool themeConfigLoaded: false
+  property string defaultLookSource: ""
+  property string defaultRulesSource: ""
+  property string themeConfigSource: ""
 
   readonly property string themeNamePath: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme.name"
+  readonly property string currentThemePath: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme"
+  readonly property string omarchyPath: String(Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy")
+  readonly property string defaultLookPath: omarchyPath + "/default/hypr/looknfeel.lua"
+  readonly property string defaultRulesPath: omarchyPath + "/default/hypr/windows.lua"
+  readonly property string themeConfigPath: currentThemePath + "/hyprland.lua"
   readonly property string luaModulePath: Quickshell.env("HOME")
     + "/.config/omarchy/plugins/" + moduleName + "/Omapaque.lua"
   readonly property string savedTheme: String(setting("theme", ""))
@@ -90,7 +102,7 @@ Panel {
     ])
   }
 
-  function readThemeName() {
+  function readThemeName(fileChanged) {
     var next = String(themeFile.text() || "").trim()
     if (next === "") return
 
@@ -128,13 +140,15 @@ Panel {
       return
     }
 
-    if (changed || root.savedTheme !== next)
+    if (Logic.shouldRefreshTheme(changed, root.savedTheme, next, fileChanged))
       root.scheduleBaselineRead(2200, Logic.shouldCarryAcrossTheme(
         root.persistAcrossThemes, root.customized, root.reapplyAfterBaseline))
   }
 
   function scheduleBaselineRead(delay, reapplyCustom) {
     root.cancelPendingApply()
+    root.themeConfigLoaded = false
+    themeConfigFile.reload()
     if (reapplyCustom === true && !root.reapplyAfterBaseline)
       root.reapplyPercent = root.opacityPercent
     root.reapplyAfterBaseline = root.reapplyAfterBaseline || reapplyCustom === true
@@ -161,19 +175,18 @@ Panel {
   }
 
   function readBaseline() {
-    if (baselineProc.running) return
-    root.errorText = ""
-    baselineProc.command = [
-      "bash", "-c",
-      Logic.themeOpacityProbe()
-    ]
-    baselineProc.running = true
+    if (!root.defaultLookLoaded || !root.defaultRulesLoaded || !root.themeConfigLoaded) {
+      root.errorText = ""
+      root.scheduleBaselineRetry()
+      return
+    }
+    root.acceptBaseline(Logic.parseThemeOpacitySettings(
+      root.defaultLookSource, root.defaultRulesSource, root.themeConfigSource))
   }
 
-  function acceptBaseline(raw) {
-    var baseline = Logic.parseThemeOpacity(raw)
+  function acceptBaseline(baseline) {
     if (baseline === null) {
-      root.errorText = "Waiting for a window to read theme opacity"
+      root.errorText = "Could not read the theme opacity settings"
       root.scheduleBaselineRetry()
       return
     }
@@ -215,6 +228,7 @@ Panel {
   }
 
   function setOpacity(percent, commit) {
+    if (!Logic.canSetOpacity(root.awaitingThemeBaseline)) return
     root.opacityPercent = Logic.clampPercent(percent)
     root.customized = true
     root.requestApply(root.opacityPercent)
@@ -225,6 +239,8 @@ Panel {
   function resetToTheme() {
     if (root.awaitingThemeBaseline) return
     root.cancelPendingApply()
+    root.themeConfigLoaded = false
+    themeConfigFile.reload()
     root.reapplyAfterBaseline = false
     root.awaitingThemeBaseline = true
     root.customized = false
@@ -233,6 +249,7 @@ Panel {
   }
 
   function nudgeOpacity(delta) {
+    if (!Logic.canSetOpacity(root.awaitingThemeBaseline)) return
     root.cursorActive = true
     root.focusSection = "opacity"
     root.setOpacity(root.opacityPercent + delta, true)
@@ -264,8 +281,68 @@ Panel {
     path: root.themeNamePath
     watchChanges: true
     printErrors: false
-    onLoaded: root.readThemeName()
-    onFileChanged: reload()
+    onLoaded: {
+      var changed = root.themeNameChangedOnDisk
+      root.themeNameChangedOnDisk = false
+      root.readThemeName(changed)
+    }
+    onFileChanged: {
+      root.themeNameChangedOnDisk = true
+      reload()
+    }
+  }
+
+  FileView {
+    id: defaultLookFile
+    path: root.defaultLookPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      root.defaultLookSource = String(text() || "")
+      root.defaultLookLoaded = true
+    }
+    onLoadFailed: {
+      root.defaultLookSource = ""
+      root.defaultLookLoaded = true
+    }
+    onFileChanged: {
+      root.defaultLookLoaded = false
+      reload()
+    }
+  }
+
+  FileView {
+    id: defaultRulesFile
+    path: root.defaultRulesPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      root.defaultRulesSource = String(text() || "")
+      root.defaultRulesLoaded = true
+    }
+    onLoadFailed: {
+      root.defaultRulesSource = ""
+      root.defaultRulesLoaded = true
+    }
+    onFileChanged: {
+      root.defaultRulesLoaded = false
+      reload()
+    }
+  }
+
+  FileView {
+    id: themeConfigFile
+    path: root.themeConfigPath
+    watchChanges: false
+    printErrors: false
+    onLoaded: {
+      root.themeConfigSource = String(text() || "")
+      root.themeConfigLoaded = true
+    }
+    onLoadFailed: {
+      root.themeConfigSource = ""
+      root.themeConfigLoaded = true
+    }
   }
 
   Timer {
@@ -284,21 +361,6 @@ Panel {
     id: baselineRetry
     interval: 1500
     onTriggered: root.readBaseline()
-  }
-
-  Process {
-    id: baselineProc
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.acceptBaseline(text)
-    }
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var message = String(text || "").trim()
-        if (message !== "") root.errorText = message
-      }
-    }
   }
 
   Process {
@@ -513,7 +575,7 @@ Panel {
         Text {
           width: parent.width
           visible: root.awaitingThemeBaseline || root.errorText !== ""
-          text: root.errorText !== "" ? root.errorText : "Reading the new theme's opacity…"
+          text: root.errorText !== "" ? root.errorText : "Reading the theme opacity…"
           color: root.errorText !== "" ? root.bar.urgent : Qt.darker(root.bar.foreground, 1.4)
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.caption

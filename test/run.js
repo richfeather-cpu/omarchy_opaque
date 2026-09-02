@@ -27,66 +27,82 @@ equal(context.shouldCarryAcrossTheme(false, true, false), false, "theme persiste
 equal(context.shouldCarryAcrossTheme(true, true, false), true, "custom opacity carries across themes")
 equal(context.shouldCarryAcrossTheme(true, false, true), true, "repeated theme event keeps pending opacity")
 equal(context.shouldCarryAcrossTheme(true, false, false), false, "theme default does not become custom")
+equal(context.shouldRefreshTheme(true, "old", "new", false), true, "changed theme refreshes")
+equal(context.shouldRefreshTheme(false, "same", "same", true), true, "reapplied theme refreshes")
+equal(context.shouldRefreshTheme(false, "old", "new", false), true, "stale saved theme refreshes")
+equal(context.shouldRefreshTheme(false, "same", "same", false), false, "unchanged theme stays idle")
+equal(context.canSetOpacity(false), true, "input is enabled after reading the theme")
+equal(context.canSetOpacity(true), false, "input is disabled while reading the theme")
 
 equal(
-  context.parseThemeOpacity(
-    '{"option":"decoration:active_opacity","float":1}\n' +
-    '{"opacity":0.985,"opacity_override":false}\n'
+  context.parseThemeOpacitySettings(
+    "",
+    'o.window({ tag = "default-opacity" }, { opacity = "0.985 0.96" })',
+    ""
   ),
   98.5,
-  "multiplied theme opacity"
+  "default Omarchy opacity"
 )
 equal(
-  context.parseThemeOpacity(
-    '{"option":"decoration:active_opacity","float":0.8}\n' +
-    '{"opacity":0.92,"opacity_override":true}\n'
+  context.parseThemeOpacitySettings(
+    "hl.config({ decoration = { active_opacity = 0.8 } })",
+    'o.window({ tag = "default-opacity" }, { opacity = "0.985 0.96" })',
+    ""
   ),
-  92,
-  "overridden theme opacity"
+  79,
+  "default active opacity multiplies the default rule"
 )
 equal(
-  context.parseThemeOpacity(
-    '{"option":"decoration:active_opacity","float":0.8}\n'
+  context.parseThemeOpacitySettings(
+    "hl.config({ decoration = { active_opacity = 0.8 } })",
+    'o.window({ tag = "default-opacity" }, { opacity = "0.985 0.96" })',
+    "hl.config({ decoration = { active_opacity = 0.94 } })"
   ),
-  null,
-  "missing live window opacity"
+  92.5,
+  "theme active opacity replaces the Omarchy default"
 )
 equal(
-  context.parseThemeOpacity(
-    '{"option":"decoration:active_opacity","float":0.8}\n' +
-    '{"opacity":null,"opacity_override":false}\n'
+  context.parseThemeOpacitySettings(
+    "hl.config({ decoration = { active_opacity = 0.8 } })",
+    'o.window({ tag = "default-opacity" }, { opacity = "0.985 0.96" })',
+    'hl.window_rule({ match = { tag = "default-opacity" }, opacity = "0.9 override 0.84 override" })'
   ),
-  null,
-  "null live window opacity"
+  90,
+  "theme override rule is an absolute opacity"
 )
-equal(context.parseThemeOpacity("not json"), null, "invalid option output")
 equal(
-  context.parseThemeOpacity(
-    '{"option":"decoration:active_opacity","float":1}\n' +
-    '{"opacity":1,"opacity_override":true}\n' +
-    '{"opacity":0.985,"opacity_override":false}\n' +
-    '{"opacity":1,"opacity_override":true}\n'
+  context.parseThemeOpacitySettings(
+    "",
+    'o.window({ tag = "default-opacity" }, { opacity = "0.985 0.96" })',
+    'o.window("com.mitchellh.ghostty", { opacity = "0.72 override" })'
   ),
   98.5,
-  "app-specific opaque windows do not replace the theme value"
+  "app-specific theme rules do not replace the default rule"
 )
 equal(
-  context.parseThemeOpacity(
-    '{"option":"decoration:active_opacity","float":1}\n' +
-    '{"opacity":0.94,"opacity_override":true}\n' +
-    '{"opacity":1,"opacity_override":true}\n'
+  context.parseThemeOpacitySettings(
+    "-- active_opacity = 0.5\nactive_opacity = 1",
+    '-- o.window({ tag = "default-opacity" }, { opacity = "0.5 override" })\n' +
+      "o.window({ tag = 'default-opacity' }, { opacity = '0.985 0.96' })",
+    "--[[\nactive_opacity = 0.6\n]]"
   ),
-  94,
-  "override-only themes use the lowest matching value"
+  98.5,
+  "commented settings are ignored"
 )
-
-const themeProbe = context.themeOpacityProbe()
-if (!themeProbe.includes("hyprctl clients -j"))
-  throw new Error("theme probe must inspect all live clients")
-if (!themeProbe.includes("^default-opacity\\\\*?$"))
-  throw new Error("theme probe must match Hyprland's dynamic tag suffix")
-if (!themeProbe.includes("^0x[0-9A-Fa-f]+$"))
-  throw new Error("theme probe must validate client addresses")
+equal(
+  context.parseThemeOpacitySettings(
+    "",
+    'o.window({ tag = "default-opacity" }, { opacity = "0.985" })',
+    'o.window({ tag = "default-opacity" }, { opacity = "0.8" })'
+  ),
+  80,
+  "the last theme-owned default rule wins"
+)
+equal(
+  context.parseThemeOpacitySettings("active_opacity = 0.8", "", ""),
+  null,
+  "missing default-opacity rule is reported"
+)
 
 const opaque = context.renderLuaCall("/tmp/Omapaque.lua", "apply", 100)
 if (!opaque.includes('loadfile("/tmp/Omapaque.lua")')) throw new Error("Lua module path must be quoted")
@@ -106,5 +122,23 @@ if (!panel.includes("root.cancelPendingApply()"))
   throw new Error("theme reads must cancel stale opacity applies")
 if (!panel.includes("if (evalProc.running) evalProc.running = false"))
   throw new Error("canceling an apply must stop the running process")
+if (panel.includes("hyprctl clients"))
+  throw new Error("theme opacity must not depend on live windows")
+if (!panel.includes("root.readThemeName(changed)"))
+  throw new Error("same-theme file changes must force a baseline refresh")
+if (!panel.includes("if (!Logic.canSetOpacity(root.awaitingThemeBaseline)) return"))
+  throw new Error("opacity input must wait for the theme baseline")
+
+const systemLook = "/usr/share/omarchy/default/hypr/looknfeel.lua"
+const systemRules = "/usr/share/omarchy/default/hypr/windows.lua"
+const currentTheme = path.join(process.env.HOME || "", ".local/state/omarchy/current/theme/hyprland.lua")
+if (fs.existsSync(systemLook) && fs.existsSync(systemRules)) {
+  const actual = context.parseThemeOpacitySettings(
+    fs.readFileSync(systemLook, "utf8"),
+    fs.readFileSync(systemRules, "utf8"),
+    fs.existsSync(currentTheme) ? fs.readFileSync(currentTheme, "utf8") : ""
+  )
+  if (actual === null) throw new Error("installed Omarchy settings must produce a theme opacity")
+}
 
 console.log("Logic tests passed")

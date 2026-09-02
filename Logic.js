@@ -21,69 +21,157 @@ function shouldCarryAcrossTheme(persist, customized, pending) {
   return persist === true && (customized === true || pending === true)
 }
 
+function shouldRefreshTheme(changed, savedTheme, nextTheme, fileChanged) {
+  return fileChanged === true || changed === true || String(savedTheme) !== String(nextTheme)
+}
+
+function canSetOpacity(awaitingThemeBaseline) {
+  return awaitingThemeBaseline !== true
+}
+
 function finiteNumber(value) {
   if (value === undefined || value === null || value === "") return null
   var number = Number(value)
   return isFinite(number) ? number : null
 }
 
-function parseThemeOpacity(raw) {
-  var globalActive = null
-  var candidates = []
-  var objects = String(raw || "").match(/\{[^{}]*\}/g) || []
+function stripLuaComments(raw) {
+  var source = String(raw || "")
+  var result = ""
+  var quote = ""
+  var index = 0
 
-  for (var i = 0; i < objects.length; i++) {
-    try {
-      var entry = JSON.parse(objects[i])
-      if (entry.option) {
-        if (String(entry.option) !== "decoration:active_opacity") continue
-        if (entry.float !== undefined) globalActive = finiteNumber(entry.float)
-        else if (entry.int !== undefined) globalActive = finiteNumber(entry.int)
+  while (index < source.length) {
+    var current = source.charAt(index)
+    var next = source.charAt(index + 1)
+
+    if (quote !== "") {
+      result += current
+      if (current === "\\" && index + 1 < source.length) {
+        result += next
+        index += 2
         continue
       }
-      var opacity = finiteNumber(entry.opacity)
-      if (opacity !== null) {
-        candidates.push({
-          opacity: opacity,
-          override: entry.opacity_override === true
-        })
-      }
-    } catch (error) {
+      if (current === quote) quote = ""
+      index += 1
+      continue
     }
+
+    if (current === '"' || current === "'") {
+      quote = current
+      result += current
+      index += 1
+      continue
+    }
+
+    if (current === "-" && next === "-") {
+      if (source.substr(index + 2, 2) === "[[") {
+        index += 4
+        while (index < source.length && source.substr(index, 2) !== "]]") {
+          if (source.charAt(index) === "\n") result += "\n"
+          index += 1
+        }
+        index = Math.min(source.length, index + 2)
+      } else {
+        index += 2
+        while (index < source.length && source.charAt(index) !== "\n") index += 1
+      }
+      continue
+    }
+
+    result += current
+    index += 1
   }
 
-  if (globalActive === null) return null
-  if (candidates.length === 0) return null
-
-  // App rules commonly force media apps and terminals opaque. Prefer windows
-  // still using the theme's multiplying rule, then take the lowest matching
-  // value so a later app-specific opaque rule cannot masquerade as the theme.
-  var themeCandidates = []
-  for (var j = 0; j < candidates.length; j++) {
-    if (!candidates[j].override) themeCandidates.push(candidates[j])
-  }
-  if (themeCandidates.length === 0) themeCandidates = candidates
-
-  var actual = null
-  for (var k = 0; k < themeCandidates.length; k++) {
-    var candidate = themeCandidates[k]
-    var value = candidate.override
-      ? candidate.opacity
-      : globalActive * candidate.opacity
-    if (actual === null || value < actual) actual = value
-  }
-  return clampPercent(actual * 100)
+  return result
 }
 
-function themeOpacityProbe() {
-  return [
-    "set -o pipefail",
-    "hyprctl -j getoption decoration:active_opacity",
-    "hyprctl clients -j | jq -r '.[] | select(any(.tags[]?; test(\"^default-opacity\\\\*?$\"))) | .address' | while IFS= read -r address; do",
-    "  [[ \"$address\" =~ ^0x[0-9A-Fa-f]+$ ]] || continue",
-    "  hyprctl -j --batch \"getprop address:$address opacity ; getprop address:$address opacity_override\" | jq -sc 'map(select(type == \"object\")) | {opacity: (map(select(has(\"opacity\")))[0].opacity // null), opacity_override: (map(select(has(\"opacity_override\")))[0].opacity_override // false)}'",
-    "done"
-  ].join("\n")
+function luaCallBodies(raw) {
+  var source = stripLuaComments(raw)
+  var pattern = /(?:^|[^A-Za-z0-9_])(?:o\.window|hl\.window_rule)\s*\(/g
+  var bodies = []
+  var match
+
+  while ((match = pattern.exec(source)) !== null) {
+    var open = pattern.lastIndex - 1
+    var depth = 1
+    var quote = ""
+    var index = open + 1
+
+    while (index < source.length && depth > 0) {
+      var current = source.charAt(index)
+      if (quote !== "") {
+        if (current === "\\") {
+          index += 2
+          continue
+        }
+        if (current === quote) quote = ""
+      } else if (current === '"' || current === "'") {
+        quote = current
+      } else if (current === "(") {
+        depth += 1
+      } else if (current === ")") {
+        depth -= 1
+      }
+      index += 1
+    }
+
+    if (depth === 0) bodies.push(source.substring(open + 1, index - 1))
+    pattern.lastIndex = Math.max(pattern.lastIndex, index)
+  }
+
+  return bodies
+}
+
+function parseOpacitySpec(raw) {
+  var tokens = String(raw || "").trim().split(/\s+/)
+  var opacity = finiteNumber(tokens[0])
+  if (opacity === null) return null
+  return {
+    opacity: opacity,
+    override: String(tokens[1] || "").toLowerCase() === "override"
+  }
+}
+
+function defaultOpacityRule(raw) {
+  var bodies = luaCallBodies(raw)
+  var result = null
+
+  for (var i = 0; i < bodies.length; i++) {
+    var body = bodies[i]
+    if (!/\btag\s*=\s*["']default-opacity["']/.test(body)) continue
+    var opacity = body.match(/\bopacity\s*=\s*["']([^"']+)["']/)
+    if (!opacity) continue
+    var parsed = parseOpacitySpec(opacity[1])
+    if (parsed !== null) result = parsed
+  }
+
+  return result
+}
+
+function lastNumericSetting(raw, name) {
+  var source = stripLuaComments(raw)
+  var pattern = new RegExp("\\b" + String(name) + "\\s*=\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)", "g")
+  var result = null
+  var match
+  while ((match = pattern.exec(source)) !== null) result = finiteNumber(match[1])
+  return result
+}
+
+function parseThemeOpacitySettings(defaultLookRaw, defaultRulesRaw, themeRaw) {
+  var activeOpacity = lastNumericSetting(defaultLookRaw, "active_opacity")
+  if (activeOpacity === null) activeOpacity = 1
+
+  var themeActiveOpacity = lastNumericSetting(themeRaw, "active_opacity")
+  if (themeActiveOpacity !== null) activeOpacity = themeActiveOpacity
+
+  var rule = defaultOpacityRule(defaultRulesRaw)
+  var themeRule = defaultOpacityRule(themeRaw)
+  if (themeRule !== null) rule = themeRule
+  if (rule === null) return null
+
+  var actual = rule.override ? rule.opacity : activeOpacity * rule.opacity
+  return clampPercent(actual * 100)
 }
 
 function renderUnloadCleanup() {
