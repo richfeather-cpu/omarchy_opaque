@@ -407,15 +407,6 @@ Panel {
             fontFamily: root.bar.fontFamily
           }
 
-          Text {
-            width: parent.width
-            text: "This is the exact compositor opacity. 100% is fully opaque."
-            color: Qt.darker(root.bar.foreground, 1.25)
-            font.family: root.bar.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.WordWrap
-          }
-
           CursorSurface {
             width: parent.width
             height: opacitySlider.implicitHeight + Style.spacing.controlGap
