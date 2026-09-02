@@ -134,6 +134,7 @@ Panel {
   }
 
   function scheduleBaselineRead(delay, reapplyCustom) {
+    root.cancelPendingApply()
     if (reapplyCustom === true && !root.reapplyAfterBaseline)
       root.reapplyPercent = root.opacityPercent
     root.reapplyAfterBaseline = root.reapplyAfterBaseline || reapplyCustom === true
@@ -208,6 +209,11 @@ Panel {
     evalProc.running = true
   }
 
+  function cancelPendingApply() {
+    root.applyQueued = false
+    if (evalProc.running) evalProc.running = false
+  }
+
   function setOpacity(percent, commit) {
     root.opacityPercent = Logic.clampPercent(percent)
     root.customized = true
@@ -218,6 +224,7 @@ Panel {
 
   function resetToTheme() {
     if (root.awaitingThemeBaseline) return
+    root.cancelPendingApply()
     root.reapplyAfterBaseline = false
     root.awaitingThemeBaseline = true
     root.customized = false

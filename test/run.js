@@ -101,4 +101,10 @@ if (!unloadCleanup.includes(".enabled == true")) throw new Error("enabled plugin
 if (!unloadCleanup.includes("flock -n")) throw new Error("parallel unloads must share one cleanup")
 if (!unloadCleanup.includes("hyprctl reload")) throw new Error("disabled plugins must restore theme opacity")
 
+const panel = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+if (!panel.includes("root.cancelPendingApply()"))
+  throw new Error("theme reads must cancel stale opacity applies")
+if (!panel.includes("if (evalProc.running) evalProc.running = false"))
+  throw new Error("canceling an apply must stop the running process")
+
 console.log("Logic tests passed")
