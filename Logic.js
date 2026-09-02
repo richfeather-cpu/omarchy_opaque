@@ -48,6 +48,14 @@ function parseThemeOpacity(raw) {
   return clampPercent(actual * 100)
 }
 
+function themeOpacityProbe() {
+  // Hyprland prints dynamic tags with a trailing asterisk. Its getprop matcher
+  // needs a regex that accepts that suffix.
+  return "getoption decoration:active_opacity"
+    + " ; getprop tag:default-opacity.* opacity"
+    + " ; getprop tag:default-opacity.* opacity_override"
+}
+
 function renderUnloadCleanup() {
   return [
     "exec 9>\"${XDG_RUNTIME_DIR:-/tmp}/omapaque-cleanup.lock\"",

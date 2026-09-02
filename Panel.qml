@@ -136,7 +136,7 @@ Panel {
     root.errorText = ""
     baselineProc.command = [
       "hyprctl", "-j", "--batch",
-      "getoption decoration:active_opacity ; getprop tag:default-opacity opacity ; getprop tag:default-opacity opacity_override"
+      Logic.themeOpacityProbe()
     ]
     baselineProc.running = true
   }

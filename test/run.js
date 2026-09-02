@@ -55,6 +55,10 @@ equal(
 )
 equal(context.parseThemeOpacity("not json"), null, "invalid option output")
 
+const themeProbe = context.themeOpacityProbe()
+if (!themeProbe.includes("tag:default-opacity.*"))
+  throw new Error("theme probe must match Hyprland's dynamic tag suffix")
+
 const opaque = context.renderLuaCall("/tmp/Omapaque.lua", "apply", 100)
 if (!opaque.includes('loadfile("/tmp/Omapaque.lua")')) throw new Error("Lua module path must be quoted")
 if (!opaque.includes("plugin.apply(1)")) throw new Error("100% must call Lua with opacity 1")
