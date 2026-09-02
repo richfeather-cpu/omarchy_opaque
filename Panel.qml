@@ -13,21 +13,24 @@ Panel {
   manageIpc: false
 
   property string themeName: ""
-  property real themeActiveOpacity: 1
-  property real themeInactiveOpacity: 1
-  property int opacityPercent: 100
-  property int pendingPercent: 100
+  property real themeOpacityPercent: 100
+  property real opacityPercent: 100
+  property real pendingPercent: 100
+  property bool customized: false
   property bool applyQueued: false
   property bool initialized: false
   property bool awaitingThemeBaseline: false
   property bool cursorActive: false
   property string errorText: ""
+  property string cleanupAction: ""
 
   readonly property string themeNamePath: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme.name"
   readonly property string savedTheme: String(setting("theme", ""))
-  readonly property real savedActiveOpacity: Number(setting("themeActiveOpacity", 1))
-  readonly property real savedInactiveOpacity: Number(setting("themeInactiveOpacity", 1))
-  readonly property int savedPercent: Logic.clampPercent(setting("opacityPercent", 100))
+  readonly property string savedMode: String(setting("mode", ""))
+  readonly property real savedThemeOpacity: Logic.clampPercent(setting("themeOpacityPercent", 100))
+  readonly property real savedPercent: Logic.clampPercent(setting("opacityPercent", 100))
+  readonly property bool savedCustomized: setting("customized", false) === true
+  readonly property bool legacyState: settings && settings.themeActiveOpacity !== undefined
   readonly property string displayTheme: themeName === ""
     ? "CURRENT THEME"
     : themeName.replace(/-/g, " ").toUpperCase()
@@ -36,9 +39,12 @@ Panel {
     var entry = { id: root.moduleName }
     for (var key in root.settings) if (key !== "id") entry[key] = root.settings[key]
     entry.theme = root.themeName
-    entry.themeActiveOpacity = root.themeActiveOpacity
-    entry.themeInactiveOpacity = root.themeInactiveOpacity
+    entry.mode = "absolute"
+    entry.themeOpacityPercent = root.themeOpacityPercent
     entry.opacityPercent = root.opacityPercent
+    entry.customized = root.customized
+    delete entry.themeActiveOpacity
+    delete entry.themeInactiveOpacity
 
     root.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
@@ -54,13 +60,15 @@ Panel {
 
     if (!root.initialized) {
       root.initialized = true
-      if (root.savedTheme === next
-          && isFinite(root.savedActiveOpacity)
-          && isFinite(root.savedInactiveOpacity)) {
-        root.themeActiveOpacity = root.savedActiveOpacity
-        root.themeInactiveOpacity = root.savedInactiveOpacity
+      if (root.savedMode === "absolute" && root.savedTheme === next) {
+        root.themeOpacityPercent = root.savedThemeOpacity
         root.opacityPercent = root.savedPercent
-        root.requestApply(root.opacityPercent)
+        root.customized = root.savedCustomized
+        if (root.customized) root.requestApply(root.opacityPercent)
+        return
+      }
+      if (root.legacyState) {
+        root.resetToTheme()
         return
       }
       root.scheduleBaselineRead(250)
@@ -72,9 +80,16 @@ Panel {
 
   function scheduleBaselineRead(delay) {
     root.awaitingThemeBaseline = true
-    root.opacityPercent = 100
+    root.customized = false
     baselineDelay.interval = delay
     baselineDelay.restart()
+  }
+
+  function startCleanup(action) {
+    if (cleanupProc.running || reloadProc.running) return
+    root.cleanupAction = action
+    cleanupProc.command = ["hyprctl", "eval", Logic.renderCleanup()]
+    cleanupProc.running = true
   }
 
   function readBaseline() {
@@ -82,22 +97,22 @@ Panel {
     root.errorText = ""
     baselineProc.command = [
       "hyprctl", "-j", "--batch",
-      "getoption decoration:active_opacity ; getoption decoration:inactive_opacity"
+      "getoption decoration:active_opacity ; getprop tag:default-opacity opacity ; getprop tag:default-opacity opacity_override"
     ]
     baselineProc.running = true
   }
 
   function acceptBaseline(raw) {
-    var baseline = Logic.parseOpacityOptions(raw)
-    if (!baseline) {
+    var baseline = Logic.parseThemeOpacity(raw)
+    if (baseline === null) {
       root.awaitingThemeBaseline = false
       root.errorText = "Could not read Hyprland's opacity"
       return
     }
 
-    root.themeActiveOpacity = baseline.active
-    root.themeInactiveOpacity = baseline.inactive
-    root.opacityPercent = 100
+    root.themeOpacityPercent = baseline
+    root.opacityPercent = baseline
+    root.customized = false
     root.awaitingThemeBaseline = false
     root.persistState()
   }
@@ -112,19 +127,26 @@ Panel {
     root.applyQueued = false
     evalProc.command = [
       "hyprctl", "eval",
-      Logic.renderOpacityConfig(root.themeActiveOpacity, root.themeInactiveOpacity, root.pendingPercent)
+      Logic.renderAbsoluteOpacity(root.pendingPercent)
     ]
     evalProc.running = true
   }
 
   function setOpacity(percent, commit) {
     root.opacityPercent = Logic.clampPercent(percent)
+    root.customized = true
     root.requestApply(root.opacityPercent)
-    if (commit) root.persistState()
+    if (!commit) return
+    if (Math.abs(root.opacityPercent - root.themeOpacityPercent) < 0.01) root.resetToTheme()
+    else root.persistState()
   }
 
   function resetToTheme() {
-    root.setOpacity(100, true)
+    if (root.awaitingThemeBaseline) return
+    root.awaitingThemeBaseline = true
+    root.customized = false
+    root.errorText = ""
+    root.startCleanup("reload")
   }
 
   function nudgeOpacity(delta) {
@@ -155,6 +177,12 @@ Panel {
 
   Timer {
     id: baselineDelay
+    interval: 250
+    onTriggered: root.startCleanup("baseline")
+  }
+
+  Timer {
+    id: postReloadDelay
     interval: 250
     onTriggered: root.readBaseline()
   }
@@ -190,6 +218,21 @@ Panel {
     }
   }
 
+  Process {
+    id: cleanupProc
+    onExited: {
+      if (root.cleanupAction === "reload") reloadProc.running = true
+      else root.readBaseline()
+      root.cleanupAction = ""
+    }
+  }
+
+  Process {
+    id: reloadProc
+    command: ["hyprctl", "reload"]
+    onExited: postReloadDelay.restart()
+  }
+
   IpcHandler {
     target: root.moduleName
 
@@ -199,7 +242,7 @@ Panel {
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
     function reset(): void { root.resetToTheme() }
-    function set(percent: int): void { root.setOpacity(percent, true) }
+    function set(percent: real): void { root.setOpacity(percent, true) }
   }
 
   BarIconButton {
@@ -207,15 +250,15 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: "◐"
-    active: root.opacityPercent < 100
-    tooltipText: root.opacityPercent === 100
+    active: root.customized
+    tooltipText: !root.customized
       ? "Window opacity: theme default"
-      : "Window opacity: " + root.opacityPercent + "% of theme"
+      : "Window opacity: " + Logic.formatPercent(root.opacityPercent)
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.RightButton) root.resetToTheme()
       else root.toggle()
     }
-    onWheelMoved: function(delta) { root.nudgeOpacity(delta > 0 ? 5 : -5) }
+    onWheelMoved: function(delta) { root.nudgeOpacity(delta > 0 ? 2.5 : -2.5) }
   }
 
   KeyboardPanel {
@@ -233,7 +276,7 @@ Panel {
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
         root.cursorActive = true
-        if (dx !== 0) root.nudgeOpacity(dx * 2)
+        if (dx !== 0) root.nudgeOpacity(dx)
       }
       onActivateRequested: root.resetToTheme()
       onCloseRequested: root.close()
@@ -293,7 +336,7 @@ Panel {
 
           Text {
             id: heroValue
-            text: Math.round(opacitySlider.dragging ? opacitySlider.liveValue : root.opacityPercent) + "%"
+            text: Logic.formatPercent(opacitySlider.dragging ? opacitySlider.liveValue : root.opacityPercent)
             color: root.bar.foreground
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.displayLarge
@@ -312,14 +355,14 @@ Panel {
           spacing: Style.space(7)
 
           PanelSectionHeader {
-            text: "THEME OPACITY"
+            text: "WINDOW OPACITY"
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
           }
 
           Text {
             width: parent.width
-            text: "100% keeps the theme's opacity. Lower values add transparency."
+            text: "This is the exact compositor opacity. 100% is fully opaque."
             color: Qt.darker(root.bar.foreground, 1.25)
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -341,9 +384,9 @@ Panel {
               anchors.rightMargin: Style.space(6)
               minimum: 50
               maximum: 100
-              step: 1
+              step: 0.5
               value: root.opacityPercent
-              integer: true
+              integer: false
               tickCount: 6
               onMoved: function(value) { root.setOpacity(value, false) }
               onReleased: function(value) { root.setOpacity(value, true) }
@@ -353,6 +396,14 @@ Panel {
             HoverHandler {
               onHoveredChanged: if (hovered) root.cursorActive = true
             }
+          }
+
+          Text {
+            width: parent.width
+            text: "Theme default: " + Logic.formatPercent(root.themeOpacityPercent)
+            color: Qt.darker(root.bar.foreground, 1.4)
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.caption
           }
         }
 

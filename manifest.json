@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "tomrplummer.omapaque",
   "name": "Omapaque",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Tom Plummer",
   "license": "MIT",
-  "description": "A theme-relative window opacity slider for the Omarchy bar",
+  "description": "An exact window opacity slider for the Omarchy bar",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Omapaque",
-    "description": "Adjust window opacity without replacing the theme's values",
+    "description": "Set exact window opacity and return to the theme default",
     "category": "Compositor",
     "defaultSection": "right",
     "aliases": [
