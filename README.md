@@ -49,6 +49,10 @@ copy.
 - Right-click resets to the theme value.
 - In the panel, Left and Right adjust the slider. Enter resets it.
 
+Choosing a value always keeps that exact compositor override, even when the
+number matches the current theme value. Use reset when you want the theme to
+control opacity again.
+
 The 50% lower limit prevents accidental near-invisible windows. Omapaque applies
 the chosen value to open windows and new windows. It only changes Hyprland's
 live state. It does not edit theme files or files under `~/.config/hypr`.

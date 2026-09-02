@@ -176,8 +176,7 @@ Panel {
     root.customized = true
     root.requestApply(root.opacityPercent)
     if (!commit) return
-    if (Math.abs(root.opacityPercent - root.themeOpacityPercent) < 0.01) root.resetToTheme()
-    else root.persistState()
+    root.persistState()
   }
 
   function resetToTheme() {
