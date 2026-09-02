@@ -297,7 +297,6 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: "󱡓"
-    active: root.customized
     tooltipText: !root.customized
       ? "Window opacity: theme default"
       : "Window opacity: " + Logic.formatPercent(root.opacityPercent)
