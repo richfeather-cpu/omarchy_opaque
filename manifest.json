@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tomrplummer.omapaque",
   "name": "Omapaque",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "author": "tomrplummer",
   "license": "MIT",
   "description": "An exact window opacity slider for the Omarchy bar",

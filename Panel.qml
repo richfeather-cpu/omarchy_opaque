@@ -26,6 +26,8 @@ Panel {
   property string cleanupAction: ""
 
   readonly property string themeNamePath: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme.name"
+  readonly property string luaModulePath: Quickshell.env("HOME")
+    + "/.config/omarchy/plugins/" + moduleName + "/Omapaque.lua"
   readonly property string savedTheme: String(setting("theme", ""))
   readonly property string savedMode: String(setting("mode", ""))
   readonly property real savedThemeOpacity: Logic.clampPercent(setting("themeOpacityPercent", 100))
@@ -69,20 +71,14 @@ Panel {
     root.syncingSettings = false
   }
 
-  // The bar creates one copy per monitor. The final copy starts detached
-  // cleanup, which checks that Omarchy really disabled the plugin before it
-  // touches Hyprland. Monitor removal and shell restarts therefore keep the
-  // active override.
+  // Each destroyed copy starts the same guarded command. A process lock keeps
+  // only one, and the delayed enabled-state check distinguishes plugin removal
+  // from monitor removal, source reload, and shell restart.
   function cleanupAfterUnload() {
-    var items = root.bar && typeof root.bar.moduleWidgets === "function"
-      ? root.bar.moduleWidgets(root.moduleName) : []
-    for (var i = 0; i < items.length; i++) {
-      if (items[i] && items[i] !== root) return
-    }
-
     Quickshell.execDetached([
       "bash", "-c", Logic.renderUnloadCleanup(),
-      "omapaque-cleanup", root.moduleName, Logic.renderCleanup()
+      "omapaque-cleanup", root.moduleName,
+      Logic.renderLuaCall(root.luaModulePath, "cleanup")
     ])
   }
 
@@ -99,7 +95,13 @@ Panel {
         root.themeOpacityPercent = root.savedThemeOpacity
         root.opacityPercent = root.savedPercent
         root.customized = root.savedCustomized
-        if (root.customized) root.requestApply(root.opacityPercent)
+        if (root.customized) {
+          root.requestApply(root.opacityPercent)
+          return
+        }
+        // Recover from a shell exit that may have interrupted a drag before
+        // its temporary compositor rule was committed to settings.
+        root.scheduleBaselineRead(250)
         return
       }
       if (root.legacyState) {
@@ -123,7 +125,9 @@ Panel {
   function startCleanup(action) {
     if (cleanupProc.running || reloadProc.running) return
     root.cleanupAction = action
-    cleanupProc.command = ["hyprctl", "eval", Logic.renderCleanup()]
+    cleanupProc.command = [
+      "hyprctl", "eval", Logic.renderLuaCall(root.luaModulePath, "cleanup")
+    ]
     cleanupProc.running = true
   }
 
@@ -162,7 +166,7 @@ Panel {
     root.applyQueued = false
     evalProc.command = [
       "hyprctl", "eval",
-      Logic.renderAbsoluteOpacity(root.pendingPercent)
+      Logic.renderLuaCall(root.luaModulePath, "apply", root.pendingPercent)
     ]
     evalProc.running = true
   }

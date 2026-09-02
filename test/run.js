@@ -55,17 +55,12 @@ equal(
 )
 equal(context.parseThemeOpacity("not json"), null, "invalid option output")
 
-const opaque = context.renderAbsoluteOpacity(100)
-if (!opaque.includes("_G.omapaque_opacity = 1")) throw new Error("100% must set exact opacity 1")
-if (!opaque.includes('prop = "opacity_override", value = "true"'))
-  throw new Error("absolute opacity must enable the active override")
-if (!opaque.includes('prop = "opacity_inactive_override", value = "true"'))
-  throw new Error("absolute opacity must enable the inactive override")
-if (!opaque.includes("hl.get_windows()")) throw new Error("opacity must apply to every window")
-if (!opaque.includes('hl.on("window.open"')) throw new Error("new windows must inherit the opacity")
+const opaque = context.renderLuaCall("/tmp/Omapaque.lua", "apply", 100)
+if (!opaque.includes('loadfile("/tmp/Omapaque.lua")')) throw new Error("Lua module path must be quoted")
+if (!opaque.includes("plugin.apply(1)")) throw new Error("100% must call Lua with opacity 1")
 
-const cleanup = context.renderCleanup()
-if (!cleanup.includes("omapaque_subscription:remove()")) throw new Error("cleanup must remove the window listener")
+const cleanup = context.renderLuaCall("/tmp/Omapaque.lua", "cleanup")
+if (!cleanup.includes("plugin.cleanup()")) throw new Error("cleanup must call the Lua module")
 
 const unloadCleanup = context.renderUnloadCleanup()
 if (!unloadCleanup.includes("listPlugins")) throw new Error("unload cleanup must check plugin state")

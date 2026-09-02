@@ -7,7 +7,8 @@ applied.
 Moving the slider sets that exact opacity for active, inactive, and fullscreen
 windows. Setting it to 100% makes windows fully opaque, even when the theme has
 an opacity multiplier. Switching themes removes the live override and reads the
-new theme's value.
+new theme's value. The compositor-side behavior is implemented as a named
+Hyprland Lua window rule, so removing it reveals the theme's rule again.
 
 ## Install
 

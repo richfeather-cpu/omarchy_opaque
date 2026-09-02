@@ -65,41 +65,15 @@ function luaNumber(value) {
   return String(parseFloat(Number(value).toFixed(4)))
 }
 
-function renderAbsoluteOpacity(percent) {
-  var opacity = luaNumber(clampPercent(percent) / 100)
-  return [
-    "_G.omapaque_opacity = " + opacity,
-    "_G.omapaque_apply_window = function(window)",
-    "  if not window then return end",
-    "  local value = tostring(_G.omapaque_opacity or 1)",
-    "  hl.dispatch(hl.dsp.window.set_prop({ window = window, prop = \"opacity_override\", value = \"true\" }))",
-    "  hl.dispatch(hl.dsp.window.set_prop({ window = window, prop = \"opacity_inactive_override\", value = \"true\" }))",
-    "  hl.dispatch(hl.dsp.window.set_prop({ window = window, prop = \"opacity_fullscreen_override\", value = \"true\" }))",
-    "  hl.dispatch(hl.dsp.window.set_prop({ window = window, prop = \"opacity\", value = value }))",
-    "  hl.dispatch(hl.dsp.window.set_prop({ window = window, prop = \"opacity_inactive\", value = value }))",
-    "  hl.dispatch(hl.dsp.window.set_prop({ window = window, prop = \"opacity_fullscreen\", value = value }))",
-    "end",
-    "local subscription_active = false",
-    "if _G.omapaque_subscription then",
-    "  local ok, active = pcall(function() return _G.omapaque_subscription:is_active() end)",
-    "  subscription_active = ok and active",
-    "end",
-    "if not subscription_active then",
-    "  _G.omapaque_subscription = hl.on(\"window.open\", function(window)",
-    "    if _G.omapaque_apply_window then _G.omapaque_apply_window(window) end",
-    "  end)",
-    "end",
-    "for _, window in ipairs(hl.get_windows()) do _G.omapaque_apply_window(window) end"
-  ].join("\n")
+function luaString(value) {
+  return '"' + String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n") + '"'
 }
 
-function renderCleanup() {
-  return [
-    "if _G.omapaque_subscription then",
-    "  pcall(function() _G.omapaque_subscription:remove() end)",
-    "end",
-    "_G.omapaque_subscription = nil",
-    "_G.omapaque_apply_window = nil",
-    "_G.omapaque_opacity = nil"
-  ].join("\n")
+function renderLuaCall(path, method, percent) {
+  var argument = percent === undefined ? "" : luaNumber(clampPercent(percent) / 100)
+  return "local plugin = assert(loadfile(" + luaString(path) + "))(); plugin."
+    + String(method) + "(" + argument + ")"
 }
