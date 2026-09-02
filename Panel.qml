@@ -296,8 +296,7 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "◐"
-    fontSize: Style.bar.iconCanvas
+    text: "󱡓"
     active: root.customized
     tooltipText: !root.customized
       ? "Window opacity: theme default"
@@ -343,7 +342,7 @@ Panel {
 
           Text {
             id: heroIcon
-            text: "◐"
+            text: "󱡓"
             color: root.bar.foreground
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.display
