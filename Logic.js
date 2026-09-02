@@ -17,6 +17,10 @@ function nextRetryDelay(value) {
   return Math.min(Math.round(delay * 2), 10000)
 }
 
+function shouldCarryAcrossTheme(persist, customized, pending) {
+  return persist === true && (customized === true || pending === true)
+}
+
 function finiteNumber(value) {
   if (value === undefined || value === null || value === "") return null
   var number = Number(value)

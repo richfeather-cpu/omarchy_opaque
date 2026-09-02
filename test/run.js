@@ -23,6 +23,10 @@ equal(context.nextRetryDelay(1500), 3000, "first retry backoff")
 equal(context.nextRetryDelay(6000), 10000, "retry backoff cap")
 equal(context.nextRetryDelay(10000), 10000, "capped retry backoff")
 equal(context.nextRetryDelay("invalid"), 3000, "invalid retry delay fallback")
+equal(context.shouldCarryAcrossTheme(false, true, false), false, "theme persistence defaults off")
+equal(context.shouldCarryAcrossTheme(true, true, false), true, "custom opacity carries across themes")
+equal(context.shouldCarryAcrossTheme(true, false, true), true, "repeated theme event keeps pending opacity")
+equal(context.shouldCarryAcrossTheme(true, false, false), false, "theme default does not become custom")
 
 equal(
   context.parseThemeOpacity(

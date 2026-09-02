@@ -22,6 +22,10 @@ Panel {
   property bool awaitingThemeBaseline: false
   property bool syncingSettings: false
   property bool cursorActive: false
+  property bool persistAcrossThemes: false
+  property bool reapplyAfterBaseline: false
+  property real reapplyPercent: 100
+  property string focusSection: "opacity"
   property real wheelAccumulator: 0
   property int baselineRetryDelay: 1500
   property string errorText: ""
@@ -35,6 +39,7 @@ Panel {
   readonly property real savedThemeOpacity: Logic.clampPercent(setting("themeOpacityPercent", 100))
   readonly property real savedPercent: Logic.clampPercent(setting("opacityPercent", 100))
   readonly property bool savedCustomized: setting("customized", false) === true
+  readonly property bool savedPersistAcrossThemes: setting("persistAcrossThemes", false) === true
   readonly property bool legacyState: settings && settings.themeActiveOpacity !== undefined
   readonly property string displayTheme: themeName === ""
     ? "CURRENT THEME"
@@ -48,6 +53,7 @@ Panel {
     entry.themeOpacityPercent = root.themeOpacityPercent
     entry.opacityPercent = root.opacityPercent
     entry.customized = root.customized
+    entry.persistAcrossThemes = root.persistAcrossThemes
     delete entry.themeActiveOpacity
     delete entry.themeInactiveOpacity
 
@@ -59,13 +65,14 @@ Panel {
   // Inline settings are shared by every monitor, while these display values
   // are local properties. Copy each committed change into the other widgets.
   function syncStateFromSettings() {
-    if (!root.initialized || root.syncingSettings) return
+    if (!root.initialized || root.syncingSettings || root.awaitingThemeBaseline) return
     if (root.savedMode !== "absolute" || root.savedTheme !== root.themeName) return
 
     root.syncingSettings = true
     root.themeOpacityPercent = root.savedThemeOpacity
     root.opacityPercent = root.savedPercent
     root.customized = root.savedCustomized
+    root.persistAcrossThemes = root.savedPersistAcrossThemes
     root.awaitingThemeBaseline = false
     root.errorText = ""
     baselineDelay.stop()
@@ -93,6 +100,7 @@ Panel {
 
     if (!root.initialized) {
       root.initialized = true
+      root.persistAcrossThemes = root.savedPersistAcrossThemes
       if (root.savedMode === "absolute" && root.savedTheme === next) {
         root.themeOpacityPercent = root.savedThemeOpacity
         root.opacityPercent = root.savedPercent
@@ -106,6 +114,13 @@ Panel {
         root.scheduleBaselineRead(250)
         return
       }
+      if (root.savedMode === "absolute" && root.savedPersistAcrossThemes
+          && root.savedCustomized) {
+        root.opacityPercent = root.savedPercent
+        root.customized = true
+        root.scheduleBaselineRead(250, true)
+        return
+      }
       if (root.legacyState) {
         root.resetToTheme()
         return
@@ -114,10 +129,15 @@ Panel {
       return
     }
 
-    if (changed || root.savedTheme !== next) root.scheduleBaselineRead(2200)
+    if (changed || root.savedTheme !== next)
+      root.scheduleBaselineRead(2200, Logic.shouldCarryAcrossTheme(
+        root.persistAcrossThemes, root.customized, root.reapplyAfterBaseline))
   }
 
-  function scheduleBaselineRead(delay) {
+  function scheduleBaselineRead(delay, reapplyCustom) {
+    if (reapplyCustom === true && !root.reapplyAfterBaseline)
+      root.reapplyPercent = root.opacityPercent
+    root.reapplyAfterBaseline = root.reapplyAfterBaseline || reapplyCustom === true
     root.awaitingThemeBaseline = true
     root.customized = false
     root.baselineRetryDelay = 1500
@@ -162,8 +182,15 @@ Panel {
     baselineRetry.stop()
     root.baselineRetryDelay = 1500
     root.themeOpacityPercent = baseline
-    root.opacityPercent = baseline
-    root.customized = false
+    if (root.reapplyAfterBaseline) {
+      root.opacityPercent = root.reapplyPercent
+      root.customized = true
+      root.reapplyAfterBaseline = false
+      root.requestApply(root.opacityPercent)
+    } else {
+      root.opacityPercent = baseline
+      root.customized = false
+    }
     root.awaitingThemeBaseline = false
     root.persistState()
   }
@@ -193,6 +220,7 @@ Panel {
 
   function resetToTheme() {
     if (root.awaitingThemeBaseline) return
+    root.reapplyAfterBaseline = false
     root.awaitingThemeBaseline = true
     root.customized = false
     root.errorText = ""
@@ -201,7 +229,14 @@ Panel {
 
   function nudgeOpacity(delta) {
     root.cursorActive = true
+    root.focusSection = "opacity"
     root.setOpacity(root.opacityPercent + delta, true)
+  }
+
+  function setPersistAcrossThemes(enabled) {
+    root.persistAcrossThemes = enabled === true
+    if (!root.persistAcrossThemes) root.reapplyAfterBaseline = false
+    root.persistState()
   }
 
   visible: true
@@ -211,6 +246,7 @@ Panel {
   onOpenedChanged: {
     if (opened) {
       root.cursorActive = false
+      root.focusSection = "opacity"
       if (!root.initialized) themeFile.reload()
     }
   }
@@ -338,9 +374,18 @@ Panel {
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
         root.cursorActive = true
-        if (dx !== 0) root.nudgeOpacity(dx)
+        if (dy !== 0) {
+          root.focusSection = dy > 0 ? "persistence" : "opacity"
+          return
+        }
+        if (dx !== 0 && root.focusSection === "opacity") root.nudgeOpacity(dx)
       }
-      onActivateRequested: root.resetToTheme()
+      onActivateRequested: {
+        if (root.focusSection === "persistence")
+          root.setPersistAcrossThemes(!root.persistAcrossThemes)
+        else
+          root.resetToTheme()
+      }
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
@@ -425,7 +470,7 @@ Panel {
           CursorSurface {
             width: parent.width
             height: opacitySlider.implicitHeight + Style.spacing.controlGap
-            hasCursor: root.cursorActive
+            hasCursor: root.cursorActive && root.focusSection === "opacity"
             foreground: root.bar.foreground
             outline: true
 
@@ -448,7 +493,10 @@ Panel {
             }
 
             HoverHandler {
-              onHoveredChanged: if (hovered) root.cursorActive = true
+              onHoveredChanged: if (hovered) {
+                root.cursorActive = true
+                root.focusSection = "opacity"
+              }
             }
           }
 
@@ -469,6 +517,25 @@ Panel {
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.caption
           wrapMode: Text.WordWrap
+        }
+
+        PanelSeparator {
+          foreground: root.bar.foreground
+        }
+
+        Toggle {
+          width: parent.width
+          label: "Keep custom opacity across themes"
+          checked: root.persistAcrossThemes
+          hasCursor: root.cursorActive && root.focusSection === "persistence"
+          foreground: root.bar.foreground
+          fontFamily: root.bar.fontFamily
+          onHovered: function(isHovered) {
+            if (!isHovered) return
+            root.cursorActive = true
+            root.focusSection = "persistence"
+          }
+          onClicked: root.setPersistAcrossThemes(!root.persistAcrossThemes)
         }
       }
     }

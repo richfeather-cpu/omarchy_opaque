@@ -6,9 +6,11 @@ applied.
 
 Moving the slider sets that exact opacity for active, inactive, and fullscreen
 windows. Setting it to 100% makes windows fully opaque, even when the theme has
-an opacity multiplier. Switching themes removes the live override and reads the
-new theme's value. The compositor-side behavior is implemented as a named
-Hyprland Lua window rule, so removing it reveals the theme's rule again.
+an opacity multiplier. By default, switching themes removes the live override
+and reads the new theme's value. An optional panel setting can reapply the custom
+value after Omapaque records the new theme default. The compositor-side behavior
+is implemented as a named Hyprland Lua window rule, so removing it reveals the
+theme's rule again.
 
 ## Install
 
@@ -47,11 +49,15 @@ only if the rescan does not work.
 - Left-click opens the slider.
 - Scroll over the icon to change opacity in 2.5% steps.
 - Right-click resets to the theme value.
-- In the panel, Left and Right adjust the slider. Enter resets it.
+- In the panel, Left and Right adjust the slider. Up and Down move between the
+  slider and persistence toggle. Enter activates the selected control.
+- Enable **Keep custom opacity across themes** to reapply your chosen value after
+  a theme change.
 
 Choosing a value always keeps that exact compositor override, even when the
 number matches the current theme value. Use reset when you want the theme to
-control opacity again.
+control opacity again. Reset keeps the cross-theme preference enabled, so the
+next custom value will also persist.
 
 The 50% lower limit prevents accidental near-invisible windows. Omapaque applies
 the chosen value to open windows and new windows. It only changes Hyprland's
