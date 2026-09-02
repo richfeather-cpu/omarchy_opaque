@@ -22,6 +22,8 @@ Panel {
   property bool awaitingThemeBaseline: false
   property bool syncingSettings: false
   property bool cursorActive: false
+  property real wheelAccumulator: 0
+  property int baselineRetryDelay: 1500
   property string errorText: ""
   property string cleanupAction: ""
 
@@ -118,8 +120,16 @@ Panel {
   function scheduleBaselineRead(delay) {
     root.awaitingThemeBaseline = true
     root.customized = false
+    root.baselineRetryDelay = 1500
+    baselineRetry.stop()
     baselineDelay.interval = delay
     baselineDelay.restart()
+  }
+
+  function scheduleBaselineRetry() {
+    baselineRetry.interval = root.baselineRetryDelay
+    baselineRetry.restart()
+    root.baselineRetryDelay = Logic.nextRetryDelay(root.baselineRetryDelay)
   }
 
   function startCleanup(action) {
@@ -145,10 +155,12 @@ Panel {
     var baseline = Logic.parseThemeOpacity(raw)
     if (baseline === null) {
       root.errorText = "Waiting for a window to read theme opacity"
-      baselineRetry.restart()
+      root.scheduleBaselineRetry()
       return
     }
 
+    baselineRetry.stop()
+    root.baselineRetryDelay = 1500
     root.themeOpacityPercent = baseline
     root.opacityPercent = baseline
     root.customized = false
@@ -192,17 +204,16 @@ Panel {
     root.setOpacity(root.opacityPercent + delta, true)
   }
 
-  function open() {
-    root.controller.show()
-    root.cursorActive = false
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
-  }
-
   visible: true
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  onOpenedChanged: if (opened && !root.initialized) themeFile.reload()
+  onOpenedChanged: {
+    if (opened) {
+      root.cursorActive = false
+      if (!root.initialized) themeFile.reload()
+    }
+  }
   onSettingsChanged: if (root.initialized && !root.syncingSettings)
     Qt.callLater(root.syncStateFromSettings)
   Component.onDestruction: root.cleanupAfterUnload()
@@ -304,7 +315,12 @@ Panel {
       if (mouseButton === Qt.RightButton) root.resetToTheme()
       else root.toggle()
     }
-    onWheelMoved: function(delta) { root.nudgeOpacity(delta > 0 ? 2.5 : -2.5) }
+    onWheelMoved: function(delta) {
+      var wheel = Util.wheelSteps(root.wheelAccumulator, delta)
+      root.wheelAccumulator = wheel.remainder
+      if (wheel.steps === 0) return
+      root.nudgeOpacity(wheel.steps * 2.5)
+    }
   }
 
   KeyboardPanel {
@@ -449,7 +465,7 @@ Panel {
           width: parent.width
           visible: root.awaitingThemeBaseline || root.errorText !== ""
           text: root.errorText !== "" ? root.errorText : "Reading the new theme's opacity…"
-          color: root.errorText !== "" ? Color.urgent : Qt.darker(root.bar.foreground, 1.4)
+          color: root.errorText !== "" ? root.bar.urgent : Qt.darker(root.bar.foreground, 1.4)
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.caption
           wrapMode: Text.WordWrap

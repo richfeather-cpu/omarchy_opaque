@@ -11,6 +11,12 @@ function formatPercent(value) {
   return (Math.round(number) === number ? String(number) : number.toFixed(1)) + "%"
 }
 
+function nextRetryDelay(value) {
+  var delay = Number(value)
+  if (!isFinite(delay) || delay < 1500) delay = 1500
+  return Math.min(Math.round(delay * 2), 10000)
+}
+
 function finiteNumber(value) {
   if (value === undefined || value === null || value === "") return null
   var number = Number(value)

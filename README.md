@@ -36,11 +36,11 @@ omarchy bar move tomrplummer.omapaque --section right
 
 ```bash
 omarchy plugin update tomrplummer.omapaque --yes
-omarchy restart shell
 ```
 
-Restarting the shell makes sure it loads the updated QML instead of a cached
-copy.
+The update command rescans installed plugins. If an update does not appear,
+force another scan with `omarchy-shell shell rescanPlugins`. Restart the shell
+only if the rescan does not work.
 
 ## Use
 
@@ -56,6 +56,12 @@ control opacity again.
 The 50% lower limit prevents accidental near-invisible windows. Omapaque applies
 the chosen value to open windows and new windows. It only changes Hyprland's
 live state. It does not edit theme files or files under `~/.config/hypr`.
+
+The override applies to every regular window, including browsers, media apps,
+and other applications that Omarchy normally excludes from its default opacity
+rule. This is what lets 100% make every window fully opaque. Values below 100%
+can make those excluded applications transparent too. Reset restores Omarchy's
+normal per-application rules.
 
 ## Remove
 

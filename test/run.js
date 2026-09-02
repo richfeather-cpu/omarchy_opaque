@@ -19,6 +19,10 @@ equal(context.clampPercent(104), 100, "upper clamp")
 equal(context.clampPercent(87.6), 87.5, "half-percent rounding")
 equal(context.formatPercent(98.5), "98.5%", "decimal percentage")
 equal(context.formatPercent(100), "100%", "whole percentage")
+equal(context.nextRetryDelay(1500), 3000, "first retry backoff")
+equal(context.nextRetryDelay(6000), 10000, "retry backoff cap")
+equal(context.nextRetryDelay(10000), 10000, "capped retry backoff")
+equal(context.nextRetryDelay("invalid"), 3000, "invalid retry delay fallback")
 
 equal(
   context.parseThemeOpacity(
