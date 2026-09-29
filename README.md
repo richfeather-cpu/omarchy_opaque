@@ -48,7 +48,9 @@ only if the rescan does not work.
 ## Use
 
 - Left-click opens the slider.
-- Scroll over the icon to change opacity in 2.5% steps.
+- Scroll over the icon to change opacity in 2.5% steps (1% steps at or below
+  10%, where small changes are visible).
+- Presets under the slider jump to 1/4, 1/2, or Full opacity.
 - Right-click resets to the theme value.
 - In the panel, Left and Right adjust the slider. Up and Down move between the
   slider and persistence toggle. Enter activates the selected control.
@@ -60,7 +62,8 @@ number matches the current theme value. Use reset when you want the theme to
 control opacity again. Reset keeps the cross-theme preference enabled, so the
 next custom value will also persist.
 
-The 50% lower limit prevents accidental near-invisible windows. Omapaque applies
+The lower limit is 1%. Very low values make windows nearly invisible; right-click
+the icon or use the Full preset to recover. Omapaque applies
 the chosen value to open windows and new windows. It only changes Hyprland's
 live state. It does not edit theme files or files under `~/.config/hypr`.
 

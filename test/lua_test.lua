@@ -39,4 +39,13 @@ plugin.apply(1)
 assert(#created == 3, "apply after cleanup should create a fresh rule handle")
 assert(created[3].spec.name ~= created[1].spec.name, "fresh rules should have unique names")
 
+-- 1% floor
+plugin.apply(0.01)
+assert(_G.omapaque_rule.spec.opacity == "0.01 override 0.01 override 0.01 override", "1% should be exact")
+plugin.apply(0)
+assert(_G.omapaque_rule.spec.opacity == "0.01 override 0.01 override 0.01 override", "below 1% clamps to 1%")
+plugin.apply(0.25)
+assert(_G.omapaque_rule.spec.opacity == "0.25 override 0.25 override 0.25 override", "25% should be exact")
+plugin.cleanup()
+
 print("Lua lifecycle tests passed")

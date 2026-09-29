@@ -14,7 +14,11 @@ function equal(actual, expected, message) {
   }
 }
 
-equal(context.clampPercent(20), 50, "lower clamp")
+equal(context.clampPercent(20), 20, "20% is allowed")
+equal(context.clampPercent(0), 1, "lower clamp")
+equal(context.clampPercent(0.2), 1, "sub-1% clamps to 1%")
+equal(context.wheelStep(10, -1), 1, "fine step at the low end")
+equal(context.wheelStep(50, -1), 2.5, "coarse step above 10%")
 equal(context.clampPercent(104), 100, "upper clamp")
 equal(context.clampPercent(87.6), 87.5, "half-percent rounding")
 equal(context.formatPercent(98.5), "98.5%", "decimal percentage")

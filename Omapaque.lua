@@ -24,7 +24,7 @@ local function opacity_key(value)
 end
 
 function M.apply(value)
-  local opacity = math.max(0.5, math.min(1, tonumber(value) or 1))
+  local opacity = math.max(0.01, math.min(1, tonumber(value) or 1))
   local key = opacity_key(opacity)
 
   clear_legacy_state()

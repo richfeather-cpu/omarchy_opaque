@@ -447,7 +447,7 @@ Panel {
       var wheel = Util.wheelSteps(root.wheelAccumulator, delta)
       root.wheelAccumulator = wheel.remainder
       if (wheel.steps === 0) return
-      root.nudgeOpacity(wheel.steps * 2.5)
+      root.nudgeOpacity(wheel.steps * Logic.wheelStep(root.opacityPercent, wheel.steps))
     }
   }
 
@@ -572,13 +572,13 @@ Panel {
               anchors.fill: parent
               anchors.leftMargin: Style.space(6)
               anchors.rightMargin: Style.space(6)
-              minimum: 50
+              minimum: 1
               maximum: 100
               step: 0.5
               value: root.opacityPercent
               enabled: !root.awaitingThemeBaseline
               integer: false
-              tickCount: 6
+              tickCount: 5
               onMoved: function(value) { root.setOpacity(value, false) }
               onReleased: function(value) { root.setOpacity(value, true) }
               onRightClicked: root.resetToTheme()
@@ -588,6 +588,44 @@ Panel {
               onHoveredChanged: if (hovered) {
                 root.cursorActive = true
                 root.focusSection = "opacity"
+              }
+            }
+          }
+
+          // Quick presets. They go through
+          // setOpacity(), the same path the slider's release uses, so the
+          // slider follows and the value is committed to settings.
+          Row {
+            id: presetRow
+            width: parent.width
+            spacing: Style.spacing.xs
+
+            readonly property var presets: [
+              { label: "1/4", percent: 25 },
+              { label: "1/2", percent: 50 },
+              { label: "Full", percent: 100 }
+            ]
+            readonly property real cellWidth: (width - spacing * (presets.length - 1)) / presets.length
+
+            Repeater {
+              model: presetRow.presets
+
+              Button {
+                required property var modelData
+
+                width: presetRow.cellWidth
+                text: modelData.label
+                fontSize: Style.font.caption
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                bordered: true
+                enabled: !root.awaitingThemeBaseline
+                active: root.customized && Math.abs(root.opacityPercent - modelData.percent) < 0.25
+                onClicked: {
+                  root.cursorActive = true
+                  root.focusSection = "opacity"
+                  root.setOpacity(modelData.percent, true)
+                }
               }
             }
           }

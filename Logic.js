@@ -3,12 +3,18 @@
 function clampPercent(value) {
   var number = Number(value)
   if (!isFinite(number)) return 100
-  return Math.max(50, Math.min(100, Math.round(number * 2) / 2))
+  return Math.max(1, Math.min(100, Math.round(number * 2) / 2))
 }
 
 function formatPercent(value) {
   var number = clampPercent(value)
   return (Math.round(number) === number ? String(number) : number.toFixed(1)) + "%"
+}
+
+// Scroll/keyboard step: 2.5% normally, 1% at or below 10% where small
+// changes are visible.
+function wheelStep(current, direction) {
+  return Number(current) + (direction < 0 ? -0.0001 : 0) <= 10 ? 1 : 2.5
 }
 
 function nextRetryDelay(value) {
