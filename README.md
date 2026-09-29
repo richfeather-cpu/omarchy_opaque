@@ -1,4 +1,21 @@
-# Omapaque
+# Omapaque (richfeather-cpu fork)
+
+This is a fork of [tomrplummer/omapaque](https://github.com/tomrplummer/omapaque)
+by Tom Plummer. All credit for the original plugin goes to him; this fork adds a
+few changes on top of upstream `main`:
+
+- **Startup fix:** waits for the shell's saved settings before restoring
+  opacity, so a shell restart no longer wipes a saved custom value.
+- **Presets and a lower floor:** 1/4, 1/2, Full, and Theme presets; the minimum
+  is 1% instead of 50%, with 1% scroll steps at or below 10%.
+- **Separate focused and unfocused sliders:** the focused window and unfocused
+  windows each get their own value. Only windows Omarchy itself makes
+  translucent (the `default-opacity` tag and browsers) are affected.
+- **Clearer persistence toggle:** "Keep across themes" shows On/Off in the theme
+  accent colour, with a hint line underneath.
+
+Everything below describes the fork. The changes are also offered upstream; if
+they land there, prefer the original repository.
 
 Omapaque adds exact window-opacity sliders to the Omarchy bar: one for the
 focused window and one for unfocused windows. It reads the current theme's
@@ -25,7 +42,19 @@ run:
 omarchy plugin add . --enable --yes
 ```
 
-For a published copy, replace the path with its Git URL:
+To install this fork from GitHub:
+
+```bash
+omarchy plugin add https://github.com/richfeather-cpu/omapaque --enable
+```
+
+`omarchy plugin add` clones the repository's default branch (`main`). The fork
+keeps the upstream plugin id, `tomrplummer.omapaque`, so it installs *instead of*
+the original, not next to it. If the original is already installed, remove it
+first with `omarchy plugin remove tomrplummer.omapaque --yes`. Saved widget
+settings carry over because the id is unchanged.
+
+The original is still available at:
 
 ```bash
 omarchy plugin add https://github.com/tomrplummer/omapaque.git --enable
@@ -122,4 +151,5 @@ Node.js and Lua are only needed to run the development tests.
 
 ## License
 
-MIT
+MIT. Original work copyright (c) 2026 Tom Plummer; modifications in this fork
+copyright (c) 2026 Rich Feather. See [LICENSE](LICENSE).
