@@ -128,6 +128,8 @@ if (!panel.includes("root.readThemeName(changed)"))
   throw new Error("same-theme file changes must force a baseline refresh")
 if (!panel.includes("if (!Logic.canSetOpacity(root.awaitingThemeBaseline)) return"))
   throw new Error("opacity input must wait for the theme baseline")
+if (!panel.includes("root.themeReadPending = true"))
+  throw new Error("startup must wait for host settings before reading saved state")
 
 const systemLook = "/usr/share/omarchy/default/hypr/looknfeel.lua"
 const systemRules = "/usr/share/omarchy/default/hypr/windows.lua"

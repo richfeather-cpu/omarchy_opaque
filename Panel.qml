@@ -26,6 +26,11 @@ Panel {
   property bool reapplyAfterBaseline: false
   property real reapplyPercent: 100
   property string focusSection: "opacity"
+  // The host assigns `settings` after creation. If
+  // the theme-name file loads first, the saved values look empty and the
+  // widget would reset to the theme and overwrite them. Wait for settings.
+  property bool themeReadPending: false
+  property bool settingsWaitExpired: false
   property real wheelAccumulator: 0
   property int baselineRetryDelay: 1500
   property string errorText: ""
@@ -105,6 +110,15 @@ Panel {
   function readThemeName(fileChanged) {
     var next = String(themeFile.text() || "").trim()
     if (next === "") return
+
+    if (!root.initialized && !root.settingsWaitExpired
+        && (!root.settings || root.settings.id === undefined)) {
+      root.themeReadPending = true
+      settingsWait.restart()
+      return
+    }
+    root.themeReadPending = false
+    settingsWait.stop()
 
     var changed = root.themeName !== "" && root.themeName !== next
     root.themeName = next
@@ -272,8 +286,14 @@ Panel {
       if (!root.initialized) themeFile.reload()
     }
   }
-  onSettingsChanged: if (root.initialized && !root.syncingSettings)
-    Qt.callLater(root.syncStateFromSettings)
+  onSettingsChanged: {
+    if (root.themeReadPending && !root.initialized) {
+      Qt.callLater(function() { root.readThemeName(false) })
+      return
+    }
+    if (root.initialized && !root.syncingSettings)
+      Qt.callLater(root.syncStateFromSettings)
+  }
   Component.onDestruction: root.cleanupAfterUnload()
 
   FileView {
@@ -342,6 +362,15 @@ Panel {
     onLoadFailed: {
       root.themeConfigSource = ""
       root.themeConfigLoaded = true
+    }
+  }
+
+  Timer {
+    id: settingsWait
+    interval: 1500
+    onTriggered: {
+      root.settingsWaitExpired = true
+      if (root.themeReadPending) root.readThemeName(false)
     }
   }
 
