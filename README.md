@@ -1,13 +1,16 @@
 # Omapaque
 
-Omapaque adds an exact window-opacity slider to the Omarchy bar. It reads the
-current theme's Hyprland settings and shows the theme's default active-window
-opacity. Personal and app-specific rules, such as a rule that keeps one terminal
-opaque, do not replace the theme value shown by the slider.
+Omapaque adds exact window-opacity sliders to the Omarchy bar: one for the
+focused window and one for unfocused windows. It reads the current theme's
+Hyprland settings and starts each slider at the theme's own value (98.5% focused
+and 96% unfocused on stock Omarchy), so nothing changes until you move one.
+Personal and app-specific rules, such as a rule that keeps one terminal opaque,
+do not replace the theme values shown by the sliders.
 
-Moving the slider sets that exact opacity for active, inactive, and fullscreen
-windows. Setting it to 100% makes windows fully opaque, even when the theme has
-an opacity multiplier. By default, switching themes removes the live override
+Each slider sets that exact opacity for its kind of window, and Hyprland switches
+between the two automatically as focus moves. Fullscreen windows keep the
+theme's fullscreen value. Setting a slider to 100% makes those windows fully
+opaque, even when the theme has an opacity multiplier. By default, switching themes removes the live override
 and reads the new theme's value. An optional panel setting can reapply the custom
 value after Omapaque records the new theme default. The compositor-side behavior
 is implemented as a named Hyprland Lua window rule, so removing it reveals the
@@ -47,13 +50,17 @@ only if the rescan does not work.
 
 ## Use
 
-- Left-click opens the slider.
-- Scroll over the icon to change opacity in 2.5% steps (1% steps at or below
-  10%, where small changes are visible).
-- Presets under the slider jump to 1/4, 1/2, or Full opacity.
-- Right-click resets to the theme value.
-- In the panel, Left and Right adjust the slider. Up and Down move between the
-  slider and persistence toggle. Enter activates the selected control.
+- Left-click opens the panel with the **Focused window** and **Unfocused
+  windows** sliders.
+- Scroll over the icon to change the unfocused opacity in 2.5% steps (1% steps
+  at or below 10%, where small changes are visible).
+- Presets under each slider jump to 1/4, 1/2, or Full opacity; **Theme** resets
+  just that slider.
+- Right-click a slider to reset only that slider. Right-click the bar icon to
+  reset both to the theme values.
+- In the panel, Left and Right adjust the selected slider. Up and Down move
+  between the sliders and the persistence toggle. Enter activates the selected
+  control.
 - Enable **Keep custom opacity across themes** to reapply your chosen value after
   a theme change.
 
@@ -67,11 +74,17 @@ the icon or use the Full preset to recover. Omapaque applies
 the chosen value to open windows and new windows. It only changes Hyprland's
 live state. It does not edit theme files or files under `~/.config/hypr`.
 
-The override applies to every regular window, including browsers, media apps,
-and other applications that Omarchy normally excludes from its default opacity
-rule. This is what lets 100% make every window fully opaque. Values below 100%
-can make those excluded applications transparent too. Reset restores Omarchy's
-normal per-application rules.
+Only windows that Omarchy itself makes translucent are affected: windows with
+the `default-opacity` tag plus Chromium- and Firefox-based browsers. Browsers keep
+Omarchy's own values (100% focused, 98.5% unfocused) until the matching slider is
+moved, then follow it. Apps that Omarchy keeps solid, such as video players,
+picture-in-picture, games, VMs, and the webcam overlay, are left alone.
+Per-window toggles such as `Super + Backspace` still win. Reset restores
+Omarchy's normal per-application rules.
+
+The two values are saved separately in the widget settings (`opacityPercent` for
+unfocused windows, `focusedPercent` for the focused window). The IPC target
+accepts `set`, `setFocused`, `resetUnfocused`, `resetFocused`, and `reset`.
 
 ## Remove
 

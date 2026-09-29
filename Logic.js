@@ -180,6 +180,88 @@ function parseThemeOpacitySettings(defaultLookRaw, defaultRulesRaw, themeRaw) {
   return clampPercent(actual * 100)
 }
 
+// Theme values for focused / unfocused / fullscreen windows.
+// "a [override] i [override] f [override]"; a missing inactive value falls
+// back to the active one, a missing fullscreen value to 1 (what Hyprland
+// reports for Omarchy's two-value default rule).
+function parseOpacityValues(raw) {
+  var tokens = String(raw || "").trim().split(/\s+/)
+  var values = []
+  for (var i = 0; i < tokens.length; i++) {
+    var number = finiteNumber(tokens[i])
+    if (number !== null) {
+      values.push({ value: number, override: false })
+    } else if (tokens[i].toLowerCase() === "override" && values.length > 0) {
+      values[values.length - 1].override = true
+    }
+  }
+  return values.length > 0 ? values : null
+}
+
+function defaultOpacityValues(raw) {
+  var bodies = luaCallBodies(raw)
+  var result = null
+  for (var i = 0; i < bodies.length; i++) {
+    var body = bodies[i]
+    if (!/\btag\s*=\s*["']default-opacity["']/.test(body)) continue
+    var opacity = body.match(/\bopacity\s*=\s*["']([^"']+)["']/)
+    if (!opacity) continue
+    var parsed = parseOpacityValues(opacity[1])
+    if (parsed !== null) result = parsed
+  }
+  return result
+}
+
+function parseThemeUnfocusedSettings(defaultLookRaw, defaultRulesRaw, themeRaw) {
+  function setting(name) {
+    var value = lastNumericSetting(themeRaw, name)
+    if (value === null) value = lastNumericSetting(defaultLookRaw, name)
+    return value === null ? 1 : value
+  }
+
+  var values = defaultOpacityValues(themeRaw)
+  if (values === null) values = defaultOpacityValues(defaultRulesRaw)
+  if (values === null) return null
+
+  var active = values[0]
+  var inactive = values[1] || active
+  var fullscreen = values[2] || { value: 1, override: false }
+  function actual(entry, multiplier) {
+    return entry.override ? entry.value : entry.value * multiplier
+  }
+
+  return {
+    active: clampPercent(actual(active, setting("active_opacity")) * 100),
+    inactive: clampPercent(actual(inactive, setting("inactive_opacity")) * 100),
+    fullscreen: clampPercent(actual(fullscreen, setting("fullscreen_opacity")) * 100)
+  }
+}
+
+// Omarchy's browser rule is "1.0 0.985"; browsers keep
+// those values unless the matching slider has been moved.
+var BROWSER_FOCUSED = 100
+var BROWSER_UNFOCUSED = 98.5
+
+// Percent arguments for Omapaque.lua apply():
+// [unfocused, focused, fullscreen, browserFocused, browserUnfocused]
+function applyValues(unfocusedCustom, unfocused, themeUnfocused,
+                     focusedCustom, focused, themeFocused, themeFullscreen) {
+  return [
+    unfocusedCustom ? unfocused : themeUnfocused,
+    focusedCustom ? focused : themeFocused,
+    themeFullscreen,
+    focusedCustom ? focused : BROWSER_FOCUSED,
+    unfocusedCustom ? unfocused : BROWSER_UNFOCUSED
+  ]
+}
+
+function renderLuaApply(path, percents) {
+  var args = []
+  for (var i = 0; i < percents.length; i++) args.push(luaNumber(clampPercent(percents[i]) / 100))
+  return "local plugin = assert(loadfile(" + luaString(path) + "))(); plugin.apply("
+    + args.join(", ") + ")"
+}
+
 function renderUnloadCleanup() {
   return [
     "exec 9>\"${XDG_RUNTIME_DIR:-/tmp}/omapaque-cleanup.lock\"",
@@ -204,8 +286,14 @@ function luaString(value) {
     .replace(/\n/g, "\\n") + '"'
 }
 
-function renderLuaCall(path, method, percent) {
-  var argument = percent === undefined ? "" : luaNumber(clampPercent(percent) / 100)
+function renderLuaCall(path, method, percent, activePercent, fullscreenPercent) {
+  var args = []
+  if (percent !== undefined) args.push(luaNumber(clampPercent(percent) / 100))
+  if (percent !== undefined && activePercent !== undefined)
+    args.push(luaNumber(clampPercent(activePercent) / 100))
+  if (percent !== undefined && activePercent !== undefined && fullscreenPercent !== undefined)
+    args.push(luaNumber(clampPercent(fullscreenPercent) / 100))
+  var argument = args.join(", ")
   return "local plugin = assert(loadfile(" + luaString(path) + "))(); plugin."
     + String(method) + "(" + argument + ")"
 }

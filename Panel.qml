@@ -13,8 +13,18 @@ Panel {
   manageIpc: false
 
   property string themeName: ""
+  // themeOpacityPercent is the theme's UNFOCUSED opacity (the slider's
+  // baseline); focused/fullscreen theme values are passed through unchanged.
   property real themeOpacityPercent: 100
+  property real themeActivePercent: 98.5
+  property real themeFullscreenPercent: 100
   property real opacityPercent: 100
+  // Second slider for the FOCUSED window. Until it is
+  // moved it follows the theme's focused value, so behaviour is unchanged.
+  property real focusedPercent: 98.5
+  property bool focusedCustomized: false
+  property bool reapplyFocusedAfterBaseline: false
+  property real reapplyFocusedPercent: 98.5
   property real pendingPercent: 100
   property bool customized: false
   property bool applyQueued: false
@@ -55,6 +65,12 @@ Panel {
   readonly property real savedThemeOpacity: Logic.clampPercent(setting("themeOpacityPercent", 100))
   readonly property real savedPercent: Logic.clampPercent(setting("opacityPercent", 100))
   readonly property bool savedCustomized: setting("customized", false) === true
+  readonly property bool savedUnfocused: setting("target", "") === "unfocused"
+  readonly property real savedThemeActive: Logic.clampPercent(setting("themeActivePercent", 98.5))
+  readonly property real savedThemeFullscreen: Logic.clampPercent(setting("themeFullscreenPercent", 100))
+  readonly property real savedFocusedPercent: Logic.clampPercent(setting("focusedPercent", 98.5))
+  readonly property bool savedFocusedCustomized: setting("focusedCustomized", false) === true
+  readonly property bool anyCustomized: customized || focusedCustomized
   readonly property bool savedPersistAcrossThemes: setting("persistAcrossThemes", false) === true
   readonly property bool legacyState: settings && settings.themeActiveOpacity !== undefined
   readonly property string displayTheme: themeName === ""
@@ -66,9 +82,14 @@ Panel {
     for (var key in root.settings) if (key !== "id") entry[key] = root.settings[key]
     entry.theme = root.themeName
     entry.mode = "absolute"
+    entry.target = "unfocused"
     entry.themeOpacityPercent = root.themeOpacityPercent
+    entry.themeActivePercent = root.themeActivePercent
+    entry.themeFullscreenPercent = root.themeFullscreenPercent
     entry.opacityPercent = root.opacityPercent
     entry.customized = root.customized
+    entry.focusedPercent = root.focusedPercent
+    entry.focusedCustomized = root.focusedCustomized
     entry.persistAcrossThemes = root.persistAcrossThemes
     delete entry.themeActiveOpacity
     delete entry.themeInactiveOpacity
@@ -82,12 +103,16 @@ Panel {
   // are local properties. Copy each committed change into the other widgets.
   function syncStateFromSettings() {
     if (!root.initialized || root.syncingSettings || root.awaitingThemeBaseline) return
-    if (root.savedMode !== "absolute" || root.savedTheme !== root.themeName) return
+    if (root.savedMode !== "absolute" || root.savedTheme !== root.themeName || !root.savedUnfocused) return
 
     root.syncingSettings = true
     root.themeOpacityPercent = root.savedThemeOpacity
+    root.themeActivePercent = root.savedThemeActive
+    root.themeFullscreenPercent = root.savedThemeFullscreen
     root.opacityPercent = root.savedPercent
     root.customized = root.savedCustomized
+    root.focusedPercent = root.savedFocusedPercent
+    root.focusedCustomized = root.savedFocusedCustomized
     root.persistAcrossThemes = root.savedPersistAcrossThemes
     root.awaitingThemeBaseline = false
     root.errorText = ""
@@ -126,11 +151,15 @@ Panel {
     if (!root.initialized) {
       root.initialized = true
       root.persistAcrossThemes = root.savedPersistAcrossThemes
-      if (root.savedMode === "absolute" && root.savedTheme === next) {
+      if (root.savedMode === "absolute" && root.savedTheme === next && root.savedUnfocused) {
         root.themeOpacityPercent = root.savedThemeOpacity
+        root.themeActivePercent = root.savedThemeActive
+        root.themeFullscreenPercent = root.savedThemeFullscreen
         root.opacityPercent = root.savedPercent
         root.customized = root.savedCustomized
-        if (root.customized) {
+        root.focusedPercent = root.savedFocusedPercent
+        root.focusedCustomized = root.savedFocusedCustomized
+        if (root.customized || root.focusedCustomized) {
           root.requestApply(root.opacityPercent)
           return
         }
@@ -139,10 +168,20 @@ Panel {
         root.scheduleBaselineRead(250)
         return
       }
-      if (root.savedMode === "absolute" && root.savedPersistAcrossThemes
-          && root.savedCustomized) {
+      // Settings saved by the all-windows version: re-read the theme
+      // baseline, then keep the chosen value for unfocused windows.
+      if (root.savedMode === "absolute" && root.savedCustomized && !root.savedUnfocused) {
         root.opacityPercent = root.savedPercent
         root.customized = true
+        root.scheduleBaselineRead(250, true)
+        return
+      }
+      if (root.savedMode === "absolute" && root.savedPersistAcrossThemes
+          && (root.savedCustomized || root.savedFocusedCustomized)) {
+        root.opacityPercent = root.savedPercent
+        root.customized = root.savedCustomized
+        root.focusedPercent = root.savedFocusedPercent
+        root.focusedCustomized = root.savedFocusedCustomized
         root.scheduleBaselineRead(250, true)
         return
       }
@@ -156,18 +195,27 @@ Panel {
 
     if (Logic.shouldRefreshTheme(changed, root.savedTheme, next, fileChanged))
       root.scheduleBaselineRead(2200, Logic.shouldCarryAcrossTheme(
-        root.persistAcrossThemes, root.customized, root.reapplyAfterBaseline))
+        root.persistAcrossThemes, root.anyCustomized,
+        root.reapplyAfterBaseline || root.reapplyFocusedAfterBaseline))
   }
 
   function scheduleBaselineRead(delay, reapplyCustom) {
     root.cancelPendingApply()
     root.themeConfigLoaded = false
     themeConfigFile.reload()
-    if (reapplyCustom === true && !root.reapplyAfterBaseline)
-      root.reapplyPercent = root.opacityPercent
-    root.reapplyAfterBaseline = root.reapplyAfterBaseline || reapplyCustom === true
+    if (reapplyCustom === true && !root.reapplyAfterBaseline && !root.reapplyFocusedAfterBaseline) {
+      if (root.customized) {
+        root.reapplyPercent = root.opacityPercent
+        root.reapplyAfterBaseline = true
+      }
+      if (root.focusedCustomized) {
+        root.reapplyFocusedPercent = root.focusedPercent
+        root.reapplyFocusedAfterBaseline = true
+      }
+    }
     root.awaitingThemeBaseline = true
     root.customized = false
+    root.focusedCustomized = false
     root.baselineRetryDelay = 1500
     baselineRetry.stop()
     baselineDelay.interval = delay
@@ -194,7 +242,7 @@ Panel {
       root.scheduleBaselineRetry()
       return
     }
-    root.acceptBaseline(Logic.parseThemeOpacitySettings(
+    root.acceptBaseline(Logic.parseThemeUnfocusedSettings(
       root.defaultLookSource, root.defaultRulesSource, root.themeConfigSource))
   }
 
@@ -207,16 +255,26 @@ Panel {
 
     baselineRetry.stop()
     root.baselineRetryDelay = 1500
-    root.themeOpacityPercent = baseline
+    root.themeOpacityPercent = baseline.inactive
+    root.themeActivePercent = baseline.active
+    root.themeFullscreenPercent = baseline.fullscreen
     if (root.reapplyAfterBaseline) {
       root.opacityPercent = root.reapplyPercent
       root.customized = true
       root.reapplyAfterBaseline = false
-      root.requestApply(root.opacityPercent)
     } else {
-      root.opacityPercent = baseline
+      root.opacityPercent = baseline.inactive
       root.customized = false
     }
+    if (root.reapplyFocusedAfterBaseline) {
+      root.focusedPercent = root.reapplyFocusedPercent
+      root.focusedCustomized = true
+      root.reapplyFocusedAfterBaseline = false
+    } else {
+      root.focusedPercent = baseline.active
+      root.focusedCustomized = false
+    }
+    if (root.customized || root.focusedCustomized) root.requestApply(root.opacityPercent)
     root.awaitingThemeBaseline = false
     root.persistState()
   }
@@ -229,9 +287,14 @@ Panel {
     }
 
     root.applyQueued = false
+    // Values not customized fall back to the theme (focused/unfocused) and
+    // to Omarchy's browser defaults (focused 100%, unfocused 98.5%).
     evalProc.command = [
       "hyprctl", "eval",
-      Logic.renderLuaCall(root.luaModulePath, "apply", root.pendingPercent)
+      Logic.renderLuaApply(root.luaModulePath, Logic.applyValues(
+        root.customized, root.opacityPercent, root.themeOpacityPercent,
+        root.focusedCustomized, root.focusedPercent, root.themeActivePercent,
+        root.themeFullscreenPercent))
     ]
     evalProc.running = true
   }
@@ -250,14 +313,52 @@ Panel {
     root.persistState()
   }
 
+  function setFocusedOpacity(percent, commit) {
+    if (!Logic.canSetOpacity(root.awaitingThemeBaseline)) return
+    root.focusedPercent = Logic.clampPercent(percent)
+    root.focusedCustomized = true
+    root.requestApply(root.opacityPercent)
+    if (!commit) return
+    root.persistState()
+  }
+
+  // Per-slider resets. When the other slider is also at its theme default
+  // this is a full reset (drop the compositor rule, re-read the theme).
+  function resetUnfocused() {
+    if (root.awaitingThemeBaseline) return
+    if (!root.focusedCustomized) { root.resetToTheme(); return }
+    root.customized = false
+    root.opacityPercent = root.themeOpacityPercent
+    root.requestApply(root.opacityPercent)
+    root.persistState()
+  }
+
+  function resetFocused() {
+    if (root.awaitingThemeBaseline) return
+    if (!root.customized) { root.resetToTheme(); return }
+    root.focusedCustomized = false
+    root.focusedPercent = root.themeActivePercent
+    root.requestApply(root.opacityPercent)
+    root.persistState()
+  }
+
+  function nudgeFocused(delta) {
+    if (!Logic.canSetOpacity(root.awaitingThemeBaseline)) return
+    root.cursorActive = true
+    root.focusSection = "focused"
+    root.setFocusedOpacity(root.focusedPercent + delta, true)
+  }
+
   function resetToTheme() {
     if (root.awaitingThemeBaseline) return
     root.cancelPendingApply()
     root.themeConfigLoaded = false
     themeConfigFile.reload()
     root.reapplyAfterBaseline = false
+    root.reapplyFocusedAfterBaseline = false
     root.awaitingThemeBaseline = true
     root.customized = false
+    root.focusedCustomized = false
     root.errorText = ""
     root.clearOverrideBeforeBaseline()
   }
@@ -271,7 +372,10 @@ Panel {
 
   function setPersistAcrossThemes(enabled) {
     root.persistAcrossThemes = enabled === true
-    if (!root.persistAcrossThemes) root.reapplyAfterBaseline = false
+    if (!root.persistAcrossThemes) {
+      root.reapplyAfterBaseline = false
+      root.reapplyFocusedAfterBaseline = false
+    }
     root.persistState()
   }
 
@@ -429,6 +533,9 @@ Panel {
     function toggle(): void { root.toggle() }
     function reset(): void { root.resetToTheme() }
     function set(percent: real): void { root.setOpacity(percent, true) }
+    function setFocused(percent: real): void { root.setFocusedOpacity(percent, true) }
+    function resetUnfocused(): void { root.resetUnfocused() }
+    function resetFocused(): void { root.resetFocused() }
   }
 
   BarIconButton {
@@ -436,9 +543,8 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: "󱡓"
-    tooltipText: !root.customized
-      ? "Window opacity: theme default"
-      : "Window opacity: " + Logic.formatPercent(root.opacityPercent)
+    tooltipText: "Focused: " + (root.focusedCustomized ? Logic.formatPercent(root.focusedPercent) : "theme default")
+      + " · Unfocused: " + (root.customized ? Logic.formatPercent(root.opacityPercent) : "theme default")
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.RightButton) root.resetToTheme()
       else root.toggle()
@@ -467,16 +573,21 @@ Panel {
       onMoveRequested: function(dx, dy) {
         root.cursorActive = true
         if (dy !== 0) {
-          root.focusSection = dy > 0 ? "persistence" : "opacity"
+          var order = ["focused", "opacity", "persistence"]
+          var index = Math.max(0, order.indexOf(root.focusSection))
+          root.focusSection = order[Math.max(0, Math.min(order.length - 1, index + (dy > 0 ? 1 : -1)))]
           return
         }
         if (dx !== 0 && root.focusSection === "opacity") root.nudgeOpacity(dx)
+        if (dx !== 0 && root.focusSection === "focused") root.nudgeFocused(dx)
       }
       onActivateRequested: {
         if (root.focusSection === "persistence")
           root.setPersistAcrossThemes(!root.persistAcrossThemes)
+        else if (root.focusSection === "focused")
+          root.resetFocused()
         else
-          root.resetToTheme()
+          root.resetUnfocused()
       }
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
@@ -533,15 +644,29 @@ Panel {
             }
           }
 
-          Text {
+          Column {
             id: heroValue
-            text: Logic.formatPercent(opacitySlider.dragging ? opacitySlider.liveValue : root.opacityPercent)
-            color: root.bar.foreground
-            font.family: root.bar.fontFamily
-            font.pixelSize: Style.font.displayLarge
-            font.bold: true
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(2)
+
+            Text {
+              anchors.right: parent.right
+              text: "F " + Logic.formatPercent(focusedSlider.dragging ? focusedSlider.liveValue : root.focusedPercent)
+              color: root.bar.foreground
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+            }
+
+            Text {
+              anchors.right: parent.right
+              text: "U " + Logic.formatPercent(opacitySlider.dragging ? opacitySlider.liveValue : root.opacityPercent)
+              color: root.bar.foreground
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+            }
           }
         }
 
@@ -549,14 +674,152 @@ Panel {
           foreground: root.bar.foreground
         }
 
+        // FOCUSED WINDOW slider + presets (1/4, 1/2, Full,
+        // Theme). Presets use the same setter as the slider's release, so
+        // the slider follows and the value is committed to settings.
+        // Right-click the slider or press Theme to reset just this slider.
         Column {
           width: parent.width
           spacing: Style.space(7)
 
-          PanelSectionHeader {
-            text: "WINDOW OPACITY"
+          Item {
+            width: parent.width
+            implicitHeight: focusedSliderHeader.implicitHeight
+
+            PanelSectionHeader {
+              id: focusedSliderHeader
+              anchors.left: parent.left
+              text: "FOCUSED WINDOW"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+            }
+
+            Text {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: (root.focusedCustomized ? "" : "theme · ") + Logic.formatPercent(focusedSlider.dragging ? focusedSlider.liveValue : root.focusedPercent)
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+          }
+
+          CursorSurface {
+            width: parent.width
+            height: focusedSlider.implicitHeight + Style.spacing.controlGap
+            hasCursor: root.cursorActive && root.focusSection === "focused"
             foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
+            outline: true
+
+            PanelSlider {
+              id: focusedSlider
+              bar: root.bar
+              anchors.fill: parent
+              anchors.leftMargin: Style.space(6)
+              anchors.rightMargin: Style.space(6)
+              minimum: 1
+              maximum: 100
+              step: 0.5
+              value: root.focusedPercent
+              enabled: !root.awaitingThemeBaseline
+              integer: false
+              tickCount: 5
+              onMoved: function(value) { root.setFocusedOpacity(value, false) }
+              onReleased: function(value) { root.setFocusedOpacity(value, true) }
+              onRightClicked: root.resetFocused()
+            }
+
+            HoverHandler {
+              onHoveredChanged: if (hovered) {
+                root.cursorActive = true
+                root.focusSection = "focused"
+              }
+            }
+          }
+
+          Row {
+            id: focusedSliderPresets
+            width: parent.width
+            spacing: Style.spacing.xs
+
+            readonly property var presets: [
+              { label: "1/4", percent: 25 },
+              { label: "1/2", percent: 50 },
+              { label: "Full", percent: 100 },
+              { label: "Theme", percent: -1 }
+            ]
+            readonly property real cellWidth: (width - spacing * (presets.length - 1)) / presets.length
+
+            Repeater {
+              model: focusedSliderPresets.presets
+
+              Button {
+                required property var modelData
+
+                width: focusedSliderPresets.cellWidth
+                text: modelData.label
+                fontSize: Style.font.caption
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                bordered: true
+                enabled: !root.awaitingThemeBaseline
+                active: modelData.percent < 0
+                  ? !root.focusedCustomized
+                  : root.focusedCustomized && Math.abs(root.focusedPercent - modelData.percent) < 0.25
+                onClicked: {
+                  root.cursorActive = true
+                  root.focusSection = "focused"
+                  if (modelData.percent < 0) root.resetFocused()
+                  else root.setFocusedOpacity(modelData.percent, true)
+                }
+              }
+            }
+          }
+
+          Text {
+            width: parent.width
+            text: "Theme default: " + Logic.formatPercent(root.themeActivePercent) + " (browsers 100%)"
+            color: Qt.darker(root.bar.foreground, 1.4)
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
+        }
+
+        PanelSeparator {
+          foreground: root.bar.foreground
+        }
+
+        // UNFOCUSED WINDOWS slider + presets (1/4, 1/2, Full,
+        // Theme). Presets use the same setter as the slider's release, so
+        // the slider follows and the value is committed to settings.
+        // Right-click the slider or press Theme to reset just this slider.
+        Column {
+          width: parent.width
+          spacing: Style.space(7)
+
+          Item {
+            width: parent.width
+            implicitHeight: opacitySliderHeader.implicitHeight
+
+            PanelSectionHeader {
+              id: opacitySliderHeader
+              anchors.left: parent.left
+              text: "UNFOCUSED WINDOWS"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+            }
+
+            Text {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: (root.customized ? "" : "theme · ") + Logic.formatPercent(opacitySlider.dragging ? opacitySlider.liveValue : root.opacityPercent)
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
           }
 
           CursorSurface {
@@ -581,7 +844,7 @@ Panel {
               tickCount: 5
               onMoved: function(value) { root.setOpacity(value, false) }
               onReleased: function(value) { root.setOpacity(value, true) }
-              onRightClicked: root.resetToTheme()
+              onRightClicked: root.resetUnfocused()
             }
 
             HoverHandler {
@@ -592,39 +855,40 @@ Panel {
             }
           }
 
-          // Quick presets. They go through
-          // setOpacity(), the same path the slider's release uses, so the
-          // slider follows and the value is committed to settings.
           Row {
-            id: presetRow
+            id: opacitySliderPresets
             width: parent.width
             spacing: Style.spacing.xs
 
             readonly property var presets: [
               { label: "1/4", percent: 25 },
               { label: "1/2", percent: 50 },
-              { label: "Full", percent: 100 }
+              { label: "Full", percent: 100 },
+              { label: "Theme", percent: -1 }
             ]
             readonly property real cellWidth: (width - spacing * (presets.length - 1)) / presets.length
 
             Repeater {
-              model: presetRow.presets
+              model: opacitySliderPresets.presets
 
               Button {
                 required property var modelData
 
-                width: presetRow.cellWidth
+                width: opacitySliderPresets.cellWidth
                 text: modelData.label
                 fontSize: Style.font.caption
                 foreground: root.bar.foreground
                 fontFamily: root.bar.fontFamily
                 bordered: true
                 enabled: !root.awaitingThemeBaseline
-                active: root.customized && Math.abs(root.opacityPercent - modelData.percent) < 0.25
+                active: modelData.percent < 0
+                  ? !root.customized
+                  : root.customized && Math.abs(root.opacityPercent - modelData.percent) < 0.25
                 onClicked: {
                   root.cursorActive = true
                   root.focusSection = "opacity"
-                  root.setOpacity(modelData.percent, true)
+                  if (modelData.percent < 0) root.resetUnfocused()
+                  else root.setOpacity(modelData.percent, true)
                 }
               }
             }
@@ -636,6 +900,7 @@ Panel {
             color: Qt.darker(root.bar.foreground, 1.4)
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
           }
         }
 
