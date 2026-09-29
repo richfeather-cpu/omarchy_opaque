@@ -1,5 +1,7 @@
 # Omapaque (richfeather-cpu fork)
 
+![Omapaque panel with focused and unfocused sliders](docs/screenshot.png)
+
 This is a fork of [tomrplummer/omapaque](https://github.com/tomrplummer/omapaque)
 by Tom Plummer. All credit for the original plugin goes to him; this fork adds a
 few changes on top of upstream `main`:
