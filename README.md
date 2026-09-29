@@ -61,8 +61,9 @@ only if the rescan does not work.
 - In the panel, Left and Right adjust the selected slider. Up and Down move
   between the sliders and the persistence toggle. Enter activates the selected
   control.
-- Enable **Keep custom opacity across themes** to reapply your chosen value after
-  a theme change.
+- Turn on **Keep across themes** to reapply your chosen values after a theme
+  change. The row shows On or Off in the theme accent colour, with a hint line
+  underneath describing the current behaviour.
 
 Choosing a value always keeps that exact compositor override, even when the
 number matches the current theme value. Use reset when you want the theme to

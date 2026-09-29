@@ -918,19 +918,159 @@ Panel {
           foreground: root.bar.foreground
         }
 
-        Toggle {
+        // Persistence toggle. Same kit pieces as Ui/Toggle
+        // (BorderSurface row + ToggleSwitch, same hover/cursor/focus styling),
+        // inlined so the row can show an On/Off word and tint the switch with
+        // the theme accent when checked. The stock Toggle has no state text and
+        // draws "checked" in the plain foreground, so the state was hard to read.
+        Column {
           width: parent.width
-          label: "Keep custom opacity across themes"
-          checked: root.persistAcrossThemes
-          hasCursor: root.cursorActive && root.focusSection === "persistence"
-          foreground: root.bar.foreground
-          fontFamily: root.bar.fontFamily
-          onHovered: function(isHovered) {
-            if (!isHovered) return
-            root.cursorActive = true
-            root.focusSection = "persistence"
+          spacing: Style.space(7)
+
+          BorderSurface {
+            id: persistToggle
+            width: parent.width
+
+            property string label: "Keep across themes"
+            property bool checked: root.persistAcrossThemes
+            property bool hasCursor: root.cursorActive && root.focusSection === "persistence"
+            property color foreground: root.bar.foreground
+            property color accent: Color.accent
+            property string fontFamily: root.bar.fontFamily
+            readonly property color mutedForeground: Qt.darker(foreground, 1.4)
+
+            signal clicked()
+            signal hovered(bool isHovered)
+
+            onHovered: function(isHovered) {
+              if (!isHovered) return
+              root.cursorActive = true
+              root.focusSection = "persistence"
+            }
+            onClicked: root.setPersistAcrossThemes(!root.persistAcrossThemes)
+
+            activeFocusOnTab: true
+            Keys.onReturnPressed: persistToggle.clicked()
+            Keys.onEnterPressed: persistToggle.clicked()
+            Keys.onSpacePressed: persistToggle.clicked()
+
+            implicitHeight: Math.max(54, persistRow.implicitHeight + Style.spacing.huge)
+            radius: Style.cornerRadius
+
+            readonly property bool _hot: hasCursor || persistMouse.containsMouse
+            color: Style.controlFill(activeFocus, _hot, foreground, accent)
+            borderSpec: Border.controlSpec(activeFocus ? "focus" : (_hot ? "hover-cursor" : "normal"), foreground, accent)
+
+            Behavior on color { ColorAnimation { duration: 100 } }
+
+            Row {
+              id: persistRow
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: persistToggle.borderLeft + Style.spacing.rowPaddingX
+              anchors.rightMargin: persistToggle.borderRight + Style.spacing.rowPaddingX
+              spacing: Style.spacing.rowPaddingX
+
+              Text {
+                width: parent.width - persistState.width - persistSwitch.width - parent.spacing * 2
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: persistToggle.label
+                color: persistToggle.foreground
+                font.family: persistToggle.fontFamily
+                font.pixelSize: Style.font.subtitle
+                font.bold: true
+                wrapMode: Text.WordWrap
+              }
+
+              // Fixed to the wider word so the switch does not shift on toggle.
+              Text {
+                id: persistState
+                width: Math.ceil(persistStateMetrics.advanceWidth)
+                anchors.verticalCenter: parent.verticalCenter
+                horizontalAlignment: Text.AlignRight
+                textFormat: Text.PlainText
+                text: persistToggle.checked ? "On" : "Off"
+                color: persistToggle.checked ? persistToggle.accent : persistToggle.mutedForeground
+                font.family: persistToggle.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                font.letterSpacing: 0.6
+
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                TextMetrics {
+                  id: persistStateMetrics
+                  font: persistState.font
+                  text: "Off"
+                }
+              }
+
+              // Presentation only; the row owns the click. Same geometry as
+              // Ui/ToggleSwitch, drawn here because that switch takes its
+              // "checked" colour from the theme's selected-color (fixed on
+              // some themes), which ignores the accent. Checked: accent
+              // track tint, border and knob. Unchecked: muted foreground.
+              Rectangle {
+                id: persistSwitch
+                readonly property int trackHeight: Math.max(22, Math.round(Style.spacing.controlHeight * 0.55))
+                readonly property int knobSize: Math.max(6, Math.round(trackHeight * 0.72))
+                readonly property int knobInset: Math.max(1, Math.round((trackHeight - knobSize) / 2))
+                readonly property bool rounded: Style.cornerRadius > 0
+
+                width: Math.round(trackHeight * 1.9)
+                height: trackHeight
+                anchors.verticalCenter: parent.verticalCenter
+                radius: rounded ? height / 2 : 0
+                color: persistToggle.checked
+                  ? Util.alpha(persistToggle.accent, 0.25)
+                  : Util.alpha(persistToggle.mutedForeground, 0.06)
+                border.width: 1
+                border.color: persistToggle.checked
+                  ? persistToggle.accent
+                  : Util.alpha(persistToggle.mutedForeground, 0.45)
+
+                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                Rectangle {
+                  width: persistSwitch.knobSize
+                  height: persistSwitch.knobSize
+                  radius: persistSwitch.rounded ? height / 2 : 0
+                  x: persistToggle.checked ? persistSwitch.width - width - persistSwitch.knobInset : persistSwitch.knobInset
+                  anchors.verticalCenter: parent.verticalCenter
+                  color: persistToggle.checked ? persistToggle.accent : Qt.darker(persistToggle.foreground, 1.6)
+
+                  Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                  Behavior on color { ColorAnimation { duration: 120 } }
+                }
+              }
+            }
+
+            MouseArea {
+              id: persistMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: persistToggle.clicked()
+            }
+
+            HoverHandler {
+              onHoveredChanged: persistToggle.hovered(hovered)
+            }
           }
-          onClicked: root.setPersistAcrossThemes(!root.persistAcrossThemes)
+
+          Text {
+            width: parent.width
+            text: root.persistAcrossThemes
+              ? "On: your values stay when you switch themes."
+              : "Off: each theme sets its own opacity."
+            color: Qt.darker(root.bar.foreground, 1.4)
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
         }
       }
     }
