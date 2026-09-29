@@ -47,7 +47,7 @@ omarchy plugin add . --enable --yes
 To install this fork from GitHub:
 
 ```bash
-omarchy plugin add https://github.com/richfeather-cpu/omapaque --enable
+omarchy plugin add https://github.com/richfeather-cpu/omarchy_opaque --enable
 ```
 
 `omarchy plugin add` clones the repository's default branch (`main`). The fork
