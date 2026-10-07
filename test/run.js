@@ -163,6 +163,15 @@ if (!unloadCleanup.includes("flock -n")) throw new Error("parallel unloads must 
 if (!unloadCleanup.includes("hyprctl reload")) throw new Error("disabled plugins must restore theme opacity")
 
 const panel = fs.readFileSync(path.join(__dirname, "..", "Panel.qml"), "utf8")
+const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "manifest.json"), "utf8"))
+const pluginId = "io.github.richfeather-cpu.omarchy-opaque"
+equal(manifest.id, pluginId, "manifest plugin id")
+equal(manifest.name, "Omarchy Opaque", "manifest display name")
+equal(manifest.barWidget.displayName, "Omarchy Opaque", "bar widget display name")
+if (!panel.includes(`moduleName: "${pluginId}"`)) throw new Error("panel moduleName must match the plugin id")
+if (!panel.includes(`ipcTarget: "${pluginId}"`)) throw new Error("panel ipc target must match the plugin id")
+if (panel.includes("tomrplummer.omapaque") || manifest.id === "tomrplummer.omapaque")
+  throw new Error("plugin must not keep the original plugin id")
 if (!panel.includes("root.cancelPendingApply()"))
   throw new Error("theme reads must cancel stale opacity applies")
 if (!panel.includes("if (evalProc.running) evalProc.running = false"))

@@ -8,8 +8,8 @@ import "Logic.js" as Logic
 Panel {
   id: root
 
-  moduleName: "tomrplummer.omapaque"
-  ipcTarget: "tomrplummer.omapaque"
+  moduleName: "io.github.richfeather-cpu.omarchy-opaque"
+  ipcTarget: "io.github.richfeather-cpu.omarchy-opaque"
   manageIpc: false
 
   property string themeName: ""
