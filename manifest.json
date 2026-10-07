@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "tomrplummer.omapaque",
-  "name": "Omapaque",
+  "id": "io.github.richfeather-cpu.omarchy-opaque",
+  "name": "Omarchy Opaque",
   "version": "1.1.12",
-  "author": "tomrplummer",
+  "author": "Rich Feather (fork of Omapaque by Tom Plummer)",
   "license": "MIT",
   "description": "An exact window opacity slider for the Omarchy bar",
   "kinds": [
@@ -13,7 +13,7 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "Omapaque",
+    "displayName": "Omarchy Opaque",
     "description": "Set exact window opacity and return to the theme default",
     "category": "Compositor",
     "defaultSection": "right",
