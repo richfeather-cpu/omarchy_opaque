@@ -13,6 +13,9 @@ local M = {}
 -- Browsers get separate values, so they keep Omarchy's "1.0 0.985" until the
 -- matching slider is moved (the panel computes those and passes them in).
 local TARGETS = {
+  -- These desktop/web app IDs are not tagged as browsers by Omarchy 4.5.
+  { class = "(chatgpt|grok-bot|chrome-web\\.whatsapp\\.com__-Default)", browser = true, id = "chat-apps" },
+  { tag = "transparent-window", browser = false },
   { tag = "default-opacity", browser = false },
   { tag = "chromium-based-browser", browser = true },
   { tag = "firefox-based-browser", browser = true },
@@ -69,6 +72,13 @@ function M.apply(value, active, fullscreen, browser_active, browser_inactive)
   clear_legacy_state()
   disable_rule(_G.omapaque_rule)
 
+  -- A source reload keeps Lua globals. Retire groups from the pre-4.5 target
+  -- list before looking up the same saved opacity in the cache.
+  if _G.omapaque_targets_version ~= 3 then
+    for _, old in pairs(_G.omapaque_rules or {}) do disable_rule(old) end
+    _G.omapaque_rules = {}
+    _G.omapaque_targets_version = 3
+  end
   _G.omapaque_rules = _G.omapaque_rules or {}
   local entry = _G.omapaque_rules[key]
   if entry then
@@ -80,8 +90,8 @@ function M.apply(value, active, fullscreen, browser_active, browser_inactive)
       local focused = target.browser and b_active or theme_active
       local unfocused = target.browser and b_inactive or inactive
       table.insert(entry.rules, hl.window_rule({
-        name = "omapaque-unfocused-" .. target.tag .. "-" .. key .. "-" .. _G.omapaque_rule_serial,
-        match = { tag = target.tag },
+        name = "omapaque-unfocused-" .. (target.id or target.tag) .. "-" .. key .. "-" .. _G.omapaque_rule_serial,
+        match = target.class and { class = target.class } or { tag = target.tag },
         opacity = M.spec(focused, unfocused, theme_fullscreen),
       }))
     end

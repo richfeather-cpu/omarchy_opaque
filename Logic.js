@@ -145,13 +145,17 @@ function defaultOpacityRule(raw) {
 
   for (var i = 0; i < bodies.length; i++) {
     var body = bodies[i]
-    if (!/\btag\s*=\s*["']default-opacity["']/.test(body)) continue
+    if (!/\btag\s*=\s*["'](?:default-opacity|transparent-window)["']/.test(body)) continue
     var opacity = body.match(/\bopacity\s*=\s*["']([^"']+)["']/)
     if (!opacity) continue
     var parsed = parseOpacitySpec(opacity[1])
     if (parsed !== null) result = parsed
   }
 
+  if (result === null) {
+    var helper = stripLuaComments(raw).match(/opacity\s*=\s*opacity\s+or\s*["']([^"']+)["']/)
+    if (helper) result = parseOpacitySpec(helper[1])
+  }
   return result
 }
 
@@ -203,11 +207,15 @@ function defaultOpacityValues(raw) {
   var result = null
   for (var i = 0; i < bodies.length; i++) {
     var body = bodies[i]
-    if (!/\btag\s*=\s*["']default-opacity["']/.test(body)) continue
+    if (!/\btag\s*=\s*["'](?:default-opacity|transparent-window)["']/.test(body)) continue
     var opacity = body.match(/\bopacity\s*=\s*["']([^"']+)["']/)
     if (!opacity) continue
     var parsed = parseOpacityValues(opacity[1])
     if (parsed !== null) result = parsed
+  }
+  if (result === null) {
+    var helper = stripLuaComments(raw).match(/opacity\s*=\s*opacity\s+or\s*["']([^"']+)["']/)
+    if (helper) result = parseOpacityValues(helper[1])
   }
   return result
 }

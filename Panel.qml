@@ -46,6 +46,8 @@ Panel {
   property string errorText: ""
   property bool themeNameChangedOnDisk: false
   property bool defaultLookLoaded: false
+  property bool defaultHelpersLoaded: false
+  property string defaultHelpersSource: ""
   property bool defaultRulesLoaded: false
   property bool themeConfigLoaded: false
   property string defaultLookSource: ""
@@ -237,13 +239,13 @@ Panel {
   }
 
   function readBaseline() {
-    if (!root.defaultLookLoaded || !root.defaultRulesLoaded || !root.themeConfigLoaded) {
+    if (!root.defaultHelpersLoaded || !root.defaultLookLoaded || !root.defaultRulesLoaded || !root.themeConfigLoaded) {
       root.errorText = ""
       root.scheduleBaselineRetry()
       return
     }
     root.acceptBaseline(Logic.parseThemeUnfocusedSettings(
-      root.defaultLookSource, root.defaultRulesSource, root.themeConfigSource))
+      root.defaultLookSource, root.defaultHelpersSource + "\n" + root.defaultRulesSource, root.themeConfigSource))
   }
 
   function acceptBaseline(baseline) {
@@ -436,6 +438,25 @@ Panel {
   }
 
   FileView {
+    id: defaultHelpersFile
+    path: root.omarchyPath + "/default/hypr/helpers.lua"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      root.defaultHelpersSource = String(text() || "")
+      root.defaultHelpersLoaded = true
+    }
+    onLoadFailed: {
+      root.defaultHelpersSource = ""
+      root.defaultHelpersLoaded = true
+    }
+    onFileChanged: {
+      root.defaultHelpersLoaded = false
+      reload()
+    }
+  }
+
+  FileView {
     id: defaultRulesFile
     path: root.defaultRulesPath
     watchChanges: true
@@ -604,6 +625,7 @@ Panel {
           implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, heroValue.implicitHeight)
 
           Text {
+            textFormat: Text.PlainText
             id: heroIcon
             text: "󱡓"
             color: root.bar.foreground
@@ -623,6 +645,7 @@ Panel {
             spacing: Style.space(2)
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: "Window opacity"
               color: root.bar.foreground
@@ -633,6 +656,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: root.displayTheme
               color: Qt.darker(root.bar.foreground, 1.4)
@@ -651,6 +675,7 @@ Panel {
             spacing: Style.space(2)
 
             Text {
+              textFormat: Text.PlainText
               anchors.right: parent.right
               text: "F " + Logic.formatPercent(focusedSlider.dragging ? focusedSlider.liveValue : root.focusedPercent)
               color: root.bar.foreground
@@ -660,6 +685,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.right: parent.right
               text: "U " + Logic.formatPercent(opacitySlider.dragging ? opacitySlider.liveValue : root.opacityPercent)
               color: root.bar.foreground
@@ -695,6 +721,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: (root.focusedCustomized ? "" : "theme · ") + Logic.formatPercent(focusedSlider.dragging ? focusedSlider.liveValue : root.focusedPercent)
@@ -778,6 +805,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: "Theme default: " + Logic.formatPercent(root.themeActivePercent) + " (browsers 100%)"
             color: Qt.darker(root.bar.foreground, 1.4)
@@ -812,6 +840,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: (root.customized ? "" : "theme · ") + Logic.formatPercent(opacitySlider.dragging ? opacitySlider.liveValue : root.opacityPercent)
@@ -895,6 +924,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: "Theme default: " + Logic.formatPercent(root.themeOpacityPercent)
             color: Qt.darker(root.bar.foreground, 1.4)
@@ -905,10 +935,11 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           visible: root.awaitingThemeBaseline || root.errorText !== ""
           text: root.errorText !== "" ? root.errorText : "Reading the theme opacity…"
-          color: root.errorText !== "" ? root.bar.urgent : Qt.darker(root.bar.foreground, 1.4)
+          color: root.errorText !== "" ? Color.urgent : Qt.darker(root.bar.foreground, 1.4)
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.caption
           wrapMode: Text.WordWrap
@@ -961,7 +992,7 @@ Panel {
             color: Style.controlFill(activeFocus, _hot, foreground, accent)
             borderSpec: Border.controlSpec(activeFocus ? "focus" : (_hot ? "hover-cursor" : "normal"), foreground, accent)
 
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.duration(100) } }
 
             Row {
               id: persistRow
@@ -973,9 +1004,9 @@ Panel {
               spacing: Style.spacing.rowPaddingX
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width - persistState.width - persistSwitch.width - parent.spacing * 2
                 anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.PlainText
                 text: persistToggle.label
                 color: persistToggle.foreground
                 font.family: persistToggle.fontFamily
@@ -986,11 +1017,11 @@ Panel {
 
               // Fixed to the wider word so the switch does not shift on toggle.
               Text {
+                textFormat: Text.PlainText
                 id: persistState
                 width: Math.ceil(persistStateMetrics.advanceWidth)
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignRight
-                textFormat: Text.PlainText
                 text: persistToggle.checked ? "On" : "Off"
                 color: persistToggle.checked ? persistToggle.accent : persistToggle.mutedForeground
                 font.family: persistToggle.fontFamily
@@ -998,7 +1029,7 @@ Panel {
                 font.bold: true
                 font.letterSpacing: 0.6
 
-                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on color { ColorAnimation { duration: Style.duration(120) } }
 
                 TextMetrics {
                   id: persistStateMetrics
@@ -1031,8 +1062,8 @@ Panel {
                   ? persistToggle.accent
                   : Util.alpha(persistToggle.mutedForeground, 0.45)
 
-                Behavior on color { ColorAnimation { duration: 120 } }
-                Behavior on border.color { ColorAnimation { duration: 120 } }
+                Behavior on color { ColorAnimation { duration: Style.duration(120) } }
+                Behavior on border.color { ColorAnimation { duration: Style.duration(120) } }
 
                 Rectangle {
                   width: persistSwitch.knobSize
@@ -1042,8 +1073,8 @@ Panel {
                   anchors.verticalCenter: parent.verticalCenter
                   color: persistToggle.checked ? persistToggle.accent : Qt.darker(persistToggle.foreground, 1.6)
 
-                  Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                  Behavior on color { ColorAnimation { duration: 120 } }
+                  Behavior on x { NumberAnimation { duration: Style.duration(120); easing.type: Easing.OutCubic } }
+                  Behavior on color { ColorAnimation { duration: Style.duration(120) } }
                 }
               }
             }
@@ -1062,6 +1093,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: root.persistAcrossThemes
               ? "On: your values stay when you switch themes."

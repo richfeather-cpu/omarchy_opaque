@@ -39,6 +39,19 @@ optional panel setting can reapply the custom value after Omarchy Opaque
 records the new theme default. The compositor-side behavior is implemented as a
 named Hyprland Lua window rule, so removing it reveals the theme's rule again.
 
+## Omarchy 4.5 compatibility
+
+Version 1.1.14 follows Omarchy 4.5's `transparent-window` tag and reads the
+standard opacity from `o.transparent_window` in the installed helpers. Older
+`default-opacity` configurations remain supported. Apps no longer opted into
+transparency by Omarchy 4.5 remain opaque; browser tags are kept for older
+releases. ChatGPT (`chatgpt`), Grok (`grok-bot`), and the Chromium WhatsApp app
+(`chrome-web.whatsapp.com__-Default`) are explicitly supported even without
+browser tags. Other untagged apps are outside the current targets.
+Saved focused/unfocused values and theme persistence are preserved.
+Plugin text renders as plain text, and its animations follow the shell's
+animation preference.
+
 ## Switching from the original plugin
 
 If you already use Tom Plummer's plugin (`tomrplummer.omapaque`), uninstall

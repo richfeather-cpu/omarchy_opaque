@@ -189,10 +189,17 @@ const currentTheme = path.join(process.env.HOME || "", ".local/state/omarchy/cur
 if (fs.existsSync(systemLook) && fs.existsSync(systemRules)) {
   const actual = context.parseThemeOpacitySettings(
     fs.readFileSync(systemLook, "utf8"),
-    fs.readFileSync(systemRules, "utf8"),
+    fs.readFileSync("/usr/share/omarchy/default/hypr/helpers.lua", "utf8") + "\n" + fs.readFileSync(systemRules, "utf8"),
     fs.existsSync(currentTheme) ? fs.readFileSync(currentTheme, "utf8") : ""
   )
   if (actual === null) throw new Error("installed Omarchy settings must produce a theme opacity")
 }
 
 console.log("Logic tests passed")
+
+const helper = 'function o.transparent_window(match, opacity) o.window(match, { opacity = opacity or "0.985 0.96", tag = "+transparent-window" }) end'
+const modern = context.parseThemeUnfocusedSettings("", helper, "")
+equal(modern.active, 98.5, "4.5 helper focused baseline")
+equal(modern.inactive, 96, "4.5 helper unfocused baseline")
+equal(context.parseThemeUnfocusedSettings("", helper, 'o.window({ tag = "transparent-window" }, { opacity = "0.8 0.7" })').inactive, 70, "4.5 theme tag override wins")
+equal(context.parseThemeUnfocusedSettings("", helper, 'o.transparent_window("single-app", "0.5 0.4")').inactive, 96, "per-app helper calls do not replace the shared baseline")
